@@ -16,6 +16,7 @@ Platform plan: [master-plan.md](master-plan.md). This repo is **public** (AGPL-3
 10. Never weaken a security or isolation rule without an approved ADR.
 11. When a convention changes, update the matching instruction file and this index (`instructions-maintenance.instructions.md`).
 12. Zero manual developer setup: every new tool or system dependency gets its `make setup` step in the same change (`dev-setup.instructions.md`).
+13. Before changing design or behavior, look up only relevant plan sections; skip this for edits that preserve behavior and design. If a change conflicts with stated scope, constraints, or decisions, cite the section, explain the deviation, and wait for owner approval before implementing it. Edit the plan only on explicit request.
 
 ## Index — read the file for your task
 
