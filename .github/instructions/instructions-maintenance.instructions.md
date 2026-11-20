@@ -13,6 +13,7 @@ applyTo: '.github/instructions/**,AGENTS.md'
 - Front matter: `description:` (when to read the file) and `applyTo:` only where a file glob fits.
 - Write terse imperative bullets; no mermaid diagrams; link master-plan.md sections for detail.
 - Use paths, Make targets and names exactly as they exist in the repo.
+- Make each file self-contained (no "see above"); RAG/vector indexes must embed whole files, never partial chunks.
 - Update the `AGENTS.md` index when adding, renaming or removing a file; keep `AGENTS.md` ≤ 60 lines.
 - `make check-docs` validates the index, line counts, front matter, templates and mermaid blocks.
 - Never weaken a security rule without an accepted ADR.

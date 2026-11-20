@@ -8,6 +8,14 @@
 ```mermaid
 flowchart LR
   U[Tenant users] --> H["<tenant-id>.<schooledu.in|erpos.in>"] --> A[App on vpsNN] --> D[(Tenant database)]
+  class U user
+  class H edge
+  class A app
+  class D data
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Domains

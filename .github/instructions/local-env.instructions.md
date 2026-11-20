@@ -10,6 +10,7 @@ applyTo: 'local/**,deployments/local.yml'
 - Prefer the Sysbox runtime; fall back to `--privileged` with its own `/var/lib/docker` volume.
 - Tag kernel, firewall, sysctl and swap tasks `host_kernel`; they are skipped locally.
 - Need full fidelity? Use `make local-vm` (Multipass or libvirt).
+- Docker Engine, Multipass and other host tools are installed by `make setup` steps (`dev-setup.instructions.md`).
 - `deployments/local.yml` uses `tls.mode: selfsigned` and `dns.provider: none`; the Cloudflare role never runs locally.
 - Local hostnames use `*.localhost` (or `*.lvh.me`/`nip.io` for tools), taken from the test tenants.
 - `deployments/local.yml` selects only test tenants from `tests/tenants/`; synthetic data only.

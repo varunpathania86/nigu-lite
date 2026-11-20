@@ -15,10 +15,12 @@ Platform plan: [master-plan.md](master-plan.md). This repo is **public** (AGPL-3
 9. Branches, commit messages and PR titles follow `git.instructions.md`; never add AI `Co-authored-by` trailers.
 10. Never weaken a security or isolation rule without an approved ADR.
 11. When a convention changes, update the matching instruction file and this index (`instructions-maintenance.instructions.md`).
+12. Zero manual developer setup: every new tool or system dependency gets its `make setup` step in the same change (`dev-setup.instructions.md`).
 
 ## Index — read the file for your task
 
 All files are in `.github/instructions/`.
+**Before editing any file, you MUST open and read every matching instruction file below; the table alone is not enough.**
 
 | When you are… | Read |
 |---|---|
@@ -42,6 +44,7 @@ All files are in `.github/instructions/`.
 | Editing `.github/workflows/*` or `scripts/ci/*` | `github-actions.instructions.md` |
 | Handling secrets, ports, personal data or ads | `security.instructions.md` |
 | Working on the local VPS simulator | `local-env.instructions.md` |
+| Adding a tool, runtime or system package developers need | `dev-setup.instructions.md` |
 | Finishing a change that altered a convention | `instructions-maintenance.instructions.md` |
 
 `make check-docs` verifies that this index matches the files.

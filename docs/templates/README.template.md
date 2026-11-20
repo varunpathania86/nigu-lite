@@ -6,6 +6,12 @@
 ```mermaid
 flowchart LR
   A[Caller] --> B[This component] --> C[(Dependency)]
+  class A user
+  class B app
+  class C data
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Quick start

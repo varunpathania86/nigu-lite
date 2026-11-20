@@ -16,6 +16,7 @@ description: Read when adding a feature, service, role, Make target, workflow or
 - Run a benchmark if the feature changes resources or runtime (`benchmarks.instructions.md`).
 - Create or update the README of every touched product/folder (`readme.instructions.md`).
 - New tools, directories, targets or conventions update the instructions and `AGENTS.md` index in the same PR.
+- New developer dependencies (CLI, Docker, Node …) get a `make setup` step in the same PR (`dev-setup.instructions.md`).
 - New images or packages follow `release-publish.instructions.md`; new workflows follow `github-actions.instructions.md`.
 - Never add ads to Gibbon or tenant-data surfaces; never expose new ports publicly without review.
 - Run `make lint test-unit scan` (+ `test-integration`, `bench` when relevant) before opening the PR.

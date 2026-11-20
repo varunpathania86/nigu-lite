@@ -6,7 +6,7 @@ reviewers: <names>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 related-adrs: [<NNNN>]      # usually empty or 0001
-issues: [#<n>]
+issues: ["#<n>"]
 products: [core|erp|edu]
 ---
 
@@ -29,16 +29,28 @@ products: [core|erp|edu]
 ```mermaid
 flowchart LR
   A[Existing] --> B[(Dependency)]
+  class A app
+  class B data
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## 5. Proposed design
 ### 5.1 Overview
 ```mermaid
 flowchart LR
-  A[Existing] --> N[New component]:::new --> B[(Dependency)]
-  X[Old part]:::removed
-  classDef new fill:#d9f7d9,stroke:#2e7d32
-  classDef removed fill:#fde0e0,stroke:#c62828,stroke-dasharray:4 3
+  A[Existing] --> N["[+] New component"] --> B[(Dependency)]
+  A -.-> X["[-] Old part"]:::removed
+  linkStyle 0,1 stroke:#2e7d32,stroke-width:2px
+  linkStyle 2 stroke:#9e9e9e,stroke-dasharray:5 4
+  class A app
+  class N core
+  class B data
+  style N stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef removed fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray:5 4,color:#757575
 ```
 ### 5.2 Components and responsibilities
 | Component | Change | Responsibility | Location (path) |

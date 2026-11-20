@@ -3,19 +3,21 @@
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-MISE ?= mise
-# Pinned tools from .tool-versions, even when mise is not activated in the shell
+MISE ?= $(shell command -v mise 2>/dev/null || echo $(HOME)/.local/bin/mise)
+# Pinned tools from .tool-versions, even in a terminal opened before make setup
 RUN := $(MISE) exec --
 PYTHON := $(RUN) python
 
-.PHONY: help setup lint test-unit scan check-docs
+.PHONY: help setup doctor lint test-unit scan check-docs fix-docs
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
-setup: ## Install pinned tools (mise) and git hooks
-	$(MISE) install
-	$(RUN) pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
+setup: ## Install everything a developer machine needs (idempotent)
+	bash scripts/setup/setup.sh
+
+doctor: ## Check the developer machine without changing it
+	bash scripts/setup/setup.sh --check
 
 lint: ## Run all pre-commit hooks on all files
 	$(RUN) pre-commit run --all-files --show-diff-on-failure
@@ -28,3 +30,6 @@ scan: ## Trivy filesystem scan: secrets, misconfiguration, vulnerabilities
 
 check-docs: ## Check AGENTS index, instruction sizes, templates and mermaid blocks
 	$(PYTHON) scripts/check_docs.py
+
+fix-docs: ## Copy mermaid classDef/subgraph styles from docs/diagram-style.md into every diagram, then check
+	$(PYTHON) scripts/check_docs.py --fix
