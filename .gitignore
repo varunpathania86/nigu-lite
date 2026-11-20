@@ -1,0 +1,33 @@
+# Secrets — never commit (Vault files are committed only when encrypted)
+.env
+.env.*
+.vault-pass*
+*.pem
+*.key
+!docs/**/*.key.example
+
+# Ansible
+*.retry
+ansible/**/geerlingguy.*/
+**/ansible/galaxy_roles/
+**/ansible/collections/ansible_collections/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build, CI and benchmark output
+/report/
+/dist/
+/.cache/
+tests/benchmarks/tmp/
+bench-tenants/
+
+# Editors and OS
+.idea/
+.DS_Store
+*.swp

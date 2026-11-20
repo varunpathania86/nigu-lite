@@ -1,0 +1,14 @@
+# Image and artifact pins (master-plan.md §4, §7.4).
+# Third-party images are pinned by version AND digest; Renovate proposes updates on patch/ branches (S1).
+# Entries are added by the stage that introduces the component; there are no implicit defaults.
+schema_version: 1
+
+# --- Edge, data, identity, operations (core, S3) ---
+images: {}
+
+# --- Gibbon releases available to schools (edu, S4) ---
+# Each school's gibbon_version in deployments/<vps>.yml must exist here.
+gibbon: {}
+
+# --- ERPNext, Frappe, India Compliance (erp, S5) ---
+erpnext: {}

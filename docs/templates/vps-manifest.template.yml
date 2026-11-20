@@ -1,0 +1,19 @@
+# deployments/<vps>.yml — selects services and tenants for one VPS (master-plan.md §7.1).
+# No default values: set every key. Validation runs before any remote task.
+schema_version: 1
+host: <vps-NN>
+environment: <production|staging|local>
+public_ip: 203.0.113.10         # documentation IP; real value in the actual manifest
+node_record: <vpsNN>.nigu.in    # DNS-only A record → public_ip; target of tenant CNAMEs
+control_plane: <true|false>     # exactly one VPS hosts auth/vpn/dbx/beszel/logs .nigu.in
+dns: {provider: <cloudflare|none>}
+tls: {mode: <selfsigned|letsencrypt-staging|letsencrypt>}
+wireguard: {subnet: 10.10.0.0/24, address: 10.10.0.<n>, port: 51820}
+upgrade_day: saturday
+core_services: [edge, data, identity, backups, metrics]
+products:
+  erp:
+    tenants: [<company-id>]                       # ≤ 10 per VPS
+  edu:
+    tenants:                                      # ≤ 10 per VPS; exactly one canary
+      <school-id>: {apps: [gibbon], gibbon_version: "<version in versions.yml>", canary: true}

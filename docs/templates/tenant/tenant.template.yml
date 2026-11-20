@@ -1,0 +1,16 @@
+# <product>/tenants/<tenant-id>/tenant.yml — defines a tenant (master-plan.md §7.2).
+# Deployment manifests only select tenants; this file defines them. No default values: set every key.
+# PUBLIC REPO: no secrets or personal data here; credentials go in the encrypted vault.yml.
+schema_version: 1
+id: <tenant-id>                 # ^[a-z0-9][a-z0-9-]{1,30}$, not a reserved ID (master-plan.md §3.3)
+product: <erp|edu>
+display_name: "<Tenant display name>"
+domains:
+  primary: <tenant-id>.<schooledu.in|erpos.in>
+  custom_domains: []            # paid add-on; each needs DNS validation
+apps: [<gibbon|erpnext>]
+branding:                       # files under assets/
+  logo: assets/logo.png
+  header: assets/header.png
+  css: assets/override.css
+migrations: migrations/         # NNNN-<summary>.sql (edu) or .json (erp); 0001-bootstrap first
