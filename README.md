@@ -14,6 +14,18 @@ flowchart LR
   EDU & ERP --> CORE["core: MariaDB, LLDAP, Authelia,<br/>wg-portal, Beszel, DBX, backups"]
   CORE --> S3[("S3-compatible object store")]
   GH["This repo + GitHub Actions"] -->|"Ansible, make deploy VPS="| T
+  class U user
+  class CF,T edge
+  class EDU,ERP app
+  class CORE core
+  class S3 data
+  class GH tool
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 One YAML manifest per VPS (`deployments/<vps>.yml`) selects which tenants of which product run there.
@@ -21,10 +33,11 @@ The full design, decisions and stages are in [master-plan.md](master-plan.md).
 
 ## Quick start
 
-Prerequisites: `git`, `make`, `docker`, [mise](https://mise.jdx.dev/).
+Prerequisites: `git` and `make`; `make setup` installs everything else.
 
 ```bash
-make setup      # install pinned tools (.tool-versions) and git hooks
+make setup      # install all developer tools and git hooks (idempotent)
+make doctor     # check the machine without changing it
 make lint       # pre-commit on all files
 make test-unit  # unit tests
 make help       # all targets

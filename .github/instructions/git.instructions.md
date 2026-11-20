@@ -16,7 +16,7 @@ description: Read when creating a branch, writing a commit message, or opening a
 - `main` ruleset (from S1): PR required, green Build, squash merge only, no force push or deletion.
 - Keep history small: one squash-merged PR per stage where practical; the PR title becomes the commit.
 - Open PRs from `.github/pull_request_template.md` and fill every section.
-- Add a mermaid change diagram (≤ 10 nodes) for architecture, deployment or data-flow changes.
+- Add a mermaid change diagram (≤ 10 nodes) for architecture, deployment or data-flow changes; mark it as in `adr-lld.instructions.md`.
 - "Tests": list commands run (`make lint test-unit scan test-integration`) and benchmark links.
 - "Docs & instructions updated": LLD link (required for features), READMEs, instruction files, "ADR proposed" if any.
 - "Risk, rollback & data impact": tenants affected, backup/restore notes.

@@ -11,6 +11,14 @@ flowchart LR
   T --> G["Gibbon · FrankenPHP<br/>one Caddy block per school"]
   G --> D[("MariaDB: one DB per school")]
   P["tenants/school-id/<br/>signed package"] --> G
+  class U user
+  class H,T edge
+  class G,P app
+  class D data
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Quick start

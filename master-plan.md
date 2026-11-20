@@ -1,7 +1,7 @@
 # Master Plan — Free ERP & School Platform (ad-supported)
 
 > Status: **Revision 1** (first push to `nigu-lite`, Stage 0) · Date: 2026-11-20 · Owner: varunpathania86
-> Scope: **greenfield** **public** (AGPL-3.0) monorepo **`nigu-lite`** ("lite" = the free, ad-funded tier). The existing `infra` and `infra-core` repos are prior art only — ideas may be reused, nothing is migrated.
+> Scope: **greenfield** **public** (AGPL-3.0) monorepo **`nigu-lite`** ("lite" = the free, ad-funded tier).
 
 ---
 
@@ -26,6 +26,20 @@ flowchart LR
   CORE -->|"restic, encrypted"| S3[("S3-compatible object store")]
   GH["GitHub repo nigu-lite · CI"] -->|"signed images + tenant packages"| GHCR[("GHCR")]
   GHCR -->|"make deploy VPS= · Ansible"| EDGE
+  class SU,BU,OPS user
+  class CF,EDGE edge
+  class GIB,ERP app
+  class CORE core
+  class S3,GHCR data
+  class GH tool
+  style Users fill:transparent,stroke:#78909c,stroke-width:1.5px
+  style VPS fill:transparent,stroke:#78909c,stroke-width:1.5px
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 | If you want to know… | Read |
@@ -59,7 +73,7 @@ flowchart LR
 | G8 | Per-VPS tenant selection from one YAML manifest across product types | `deployments/<vps>.yml` selects services + tenants for `erp`, `edu`, future products |
 | G9 | Tenant resources travel with the tenant | Gibbon branding assets and ordered data migrations (incl. bootstrap) in `tenants/<id>/` |
 | G10 | Local environment that mimics a VPS | Same playbooks run against a local Docker-based "VPS" with test tenants and MinIO as object store |
-| G11 | Domains | Three Cloudflare zones. **`erpos.in`**: ERPNext (`<company>.erpos.in`). **`schooledu.in`**: one hostname per school, serving Gibbon at `https://<school>.schooledu.in/`. **`nigu.in`**: platform home and control plane (`auth`, `vpn`, `dbx`, `beszel`, VPS node records). Custom school domains later as a **paid** add-on |
+| G11 | Domains | Three Cloudflare zones. **`erpos.in`**: ERPNext (`<company>.erpos.in`). **`schooledu.in`**: one hostname per school, serving Gibbon at `https://<school>.schooledu.in/`. **`nigu.in`**: nigu-lite control-plane services (`auth`, `vpn`, `dbx`, `beszel`) and VPS node records; the provider's public website at the apex/`www` may use a separate deployment and is outside nigu-lite. Custom school domains later as a **paid** add-on |
 
 ---
 
@@ -92,7 +106,7 @@ These decisions (D1–D27) form one baseline record, `docs/adr/0001-platform-bas
 | D21 | **Plain-sentence commit messages and PR titles**, branch prefixes `feature/`, `bugfix/`, `patch/`, … | Conventional Commits | Commit message / PR title becomes the GitHub Actions run name; must read cleanly (§11.5). |
 | D22 | **S3-compatible object stores only** (`object_store.type: s3`); MinIO locally, Contabo/B2/R2 in production | Custom adapter layer; provider-native APIs from day one | restic and rclone speak S3; between S3-compatible providers, switching = endpoint + keys. Non-S3 stores (e.g. Azure Blob, native GCS, Swift) need an ADR and a new `type` (§4.5). |
 | D23 | **Public repo `nigu-lite` under AGPL-3.0**; public GHCR packages; keyless cosign signing (GitHub OIDC); `main` protected by a ruleset | Private repo on GitHub Free | Free Actions minutes, free public package storage (ERPNext image size no longer a cost), free rulesets and code scanning; AGPL keeps hosted forks open and is compatible with GPL-3.0 upstream code. Everything in the repo and its packages is public: no secrets except Vault-encrypted files, no personal data (§7.4, §13). |
-| D24 | **Cloudflare free plan** for DNS, CDN and DDoS on `nigu.in`, `erpos.in`, `schooledu.in`; two-tier records (DNS-only `A` per VPS node, proxied tenant `CNAME`s); managed by Ansible via API | Registrar DNS; wildcard records; Cloudflare Tunnel | Offloads static assets and attacks from 8 GB VPSs; tenant moves = one CNAME change, effective at the edge in seconds; no extra container (§3.4). |
+| D24 | **Cloudflare free plan** for DNS, CDN and DDoS on `nigu.in`, `erpos.in`, `schooledu.in`; nigu-lite manages only its VPS, service and tenant records (DNS-only `A` per VPS node, proxied tenant `CNAME`s); public-site records are separate; managed by Ansible via API | Registrar DNS; wildcard records; Cloudflare Tunnel | Offloads static assets and attacks from 8 GB VPSs; tenant moves = one CNAME change, effective at the edge in seconds; no extra container (§3.4). |
 | D25 | **wg-portal** (WireGuard + web UI with OIDC via Authelia) at `vpn.nigu.in`, on the control-plane VPS | Tailscale / NetBird, plain WireGuard configs | Self-hosted, one small container, standard WireGuard clients, self-service `.conf`/QR for `ops`/`admin` (§4.3). |
 | D26 | **Group-based access for platform staff** (LLDAP `admin`/`ops`/`support` → Authelia rules + OIDC policies); **tenant routers never get Authelia forwardAuth**; all tenant users, including heads/admins, use native app accounts | Authelia in front of tenant portals; LLDAP accounts for tenant users | Tenant SSO is deferred, with no scheduled rollout or tenant OIDC clients. Keeps tenant users isolated from the staff directory (§4.3, §13.1). |
 | D27 | **DBX behind VPN allow-list + Authelia + trusted-auth header**, password viewer disabled | DBX own logins; public DBX behind Authelia only | Two independent gates (network + identity) for the most sensitive tool (§4.2). |
@@ -120,6 +134,17 @@ flowchart TB
   end
   BK -->|encrypted| S3[(Off-site object store)]
   ADM[Platform staff] -->|WireGuard 51820/udp| WG
+  class U,ADM user
+  class CF,T,WG edge
+  class ERP,GIB app
+  class AUTH,LDAP,BK core
+  class MDB,ASQL,LSQL,S3 data
+  style VPS-1 fill:transparent,stroke:#78909c,stroke-width:1.5px
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 | Layer | Components |
@@ -163,6 +188,18 @@ flowchart LR
   BK --> S3[("Object store")]
   G -.->|"metrics, logs, probes"| E1 & ED & DB
   G --> S3
+  class U user
+  class E1,ED app
+  class ID,BK,G core
+  class DB,S3 data
+  style erp01 fill:transparent,stroke:#78909c,stroke-width:1.5px
+  style edu01 fill:transparent,stroke:#78909c,stroke-width:1.5px
+  style core01 fill:transparent,stroke:#78909c,stroke-width:1.5px
+  style mon01 fill:transparent,stroke:#78909c,stroke-width:1.5px
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 Moving a tenant or product = edit `deployments/<vps>.yml`, validate, deploy, restore data, repoint its Cloudflare CNAME (§3.4).
@@ -183,12 +220,19 @@ flowchart LR
   N -->|"51820/udp"| WG["wg-portal · wg0 10.10.0.1"]
   WG -->|"dbx.nigu.in → 10.10.0.1<br/>DNS-only"| T
   T --> ERP[ERPNext] & GIB[Gibbon] & AUTH[Authelia] & BES[Beszel] & DBX[DBX]
+  class ERPD,EDUD,CPD,N,T,WG edge
+  class ERP,GIB app
+  class AUTH,BES,DBX core
+  style CF fill:transparent,stroke:#78909c,stroke-width:1.5px
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
 ```
 
 | Hostname | Cloudflare record | Target | Certificate at Traefik | Access |
 |---|---|---|---|---|
 | `vps01.nigu.in` (one per VPS) | `A`, **DNS-only** | VPS public IP | — | WireGuard endpoint (`51820/udp`); CNAME target. Replacing a VPS = change this one record |
-| `nigu.in`, `www.nigu.in` | proxied | control-plane VPS | LE wildcard `*.nigu.in` | Public platform home |
+| `nigu.in`, `www.nigu.in` | Managed by the separate public-site deployment, when launched | External host, not selected by a nigu-lite VPS manifest | Managed by that deployment; not covered by nigu-lite's Traefik wildcard | SaaS provider brand website; outside nigu-lite |
 | `auth.nigu.in` | `CNAME`, proxied | control-plane VPS | LE wildcard `*.nigu.in` | Public: Authelia portal + OIDC issuer for all three domains |
 | `vpn.nigu.in` | `CNAME`, proxied | control-plane VPS | LE wildcard `*.nigu.in` | wg-portal web UI; OIDC login, groups `admin`, `ops`. The tunnel itself uses `vps01.nigu.in:51820` (Cloudflare does not proxy UDP on the free plan) |
 | `beszel.nigu.in` | `CNAME`, proxied | control-plane VPS | LE wildcard `*.nigu.in` | No VPN needed; Authelia `admin`, `ops`, `support` |
@@ -199,6 +243,7 @@ flowchart LR
 
 - **Why the WireGuard IP for DBX:** if `dbx.nigu.in` were proxied, a VPN user's browser would reach it through Cloudflare from their public IP, and an `ipAllowList` on `10.10.0.0/24` would always fail (trusting `X-Forwarded-For` would not help: it carries the public IP). Pointing a DNS-only record at `10.10.0.1` sends the traffic through the tunnel; the private IP in public DNS reveals nothing reachable.
 - **One certificate mechanism:** Let's Encrypt certificates are publicly trusted, so the same wildcard serves Cloudflare → origin (proxied hosts, Full strict) and browser → origin (DNS-only `dbx`/`logs`). For proxied hosts, visitors see Cloudflare's edge certificate, not ours (§5.1).
+- **Provider website:** `nigu.in` and `www.nigu.in` may point to a separately operated host. Their DNS records, routing and certificate are not provisioned by nigu-lite; coordinate any Cloudflare zone-wide settings with that deployment.
 - All tenant hostnames are one level deep, so Cloudflare's free Universal SSL edge certificate covers them.
 - Reserved tenant IDs (validator): `www`, `auth`, `vpn`, `dbx`, `beszel`, `logs`, `status`, `admin`, `ldap`, `grafana`, `mon`, any `vps*`.
 
@@ -224,7 +269,7 @@ flowchart LR
 Exact permission names are verified when the tokens are created (S6).
 
 **Ansible automation** (role `core/ansible/roles/cloudflare`, driven by the manifests; no shell):
-- `make dns-sync VPS=`: node `A` record from `public_ip` + `node_record`; one proxied `CNAME` per tenant hostname of that VPS. Records of tenants no longer in any manifest are **reported**, and only deleted by the tenant-retire playbook (no silent pruning).
+- `make dns-sync VPS=`: node `A` record from `public_ip` + `node_record`; one proxied `CNAME` per tenant hostname of that VPS. Records of tenants no longer in any manifest are **reported**, and only deleted by the tenant-retire playbook (no silent pruning). It never creates, changes or deletes the separate public site's apex/`www` records.
 - Tenant onboarding (`make deploy`) calls the same tasks, so a new tenant is reachable as soon as its health gate passes.
 - `make cdn-purge VPS= [ID=]`: purge by hostname for the affected tenants after an image or tenant-package change (part of the deploy when the lock diff changes static assets). Purge by hostname is available on all plans since 2025; verify rate limits in S6, fall back to purging the changed asset URLs.
 - `make tenant-move ID= FROM= TO=`:
@@ -262,11 +307,11 @@ sequenceDiagram
 | Tool pinning | **mise** + **`.tool-versions`** | Same versions of python, ansible-core, linters, trivy on laptop and CI | asdf, devcontainer |
 | Entry point | Root **Makefile** → `scripts/` or `<product>/scripts/` | Single entry point; complex logic in scripts | — |
 | Host selection | **`deployments/<vps>.yml`** manifests | Cross-product tenant placement in one file per VPS | Per-product inventories |
-| Secrets | **Ansible Vault** | Encrypted in git, no extra infra | SOPS + age |
+| Secrets | **Ansible Vault** | Encrypted in git, no extra server | SOPS + age |
 | Edge / TLS | **Traefik v3** behind Cloudflare; **Let's Encrypt** wildcard per VPS via DNS-01 (`tls.mode: letsencrypt`) | Host routers via file provider; `selfsigned` locally; `letsencrypt-staging` for the first deploy of a VPS | Caddy, Cloudflare Origin CA |
 | Firewall | **UFW** + `DOCKER-USER` rules + **CrowdSec** | 443/80 from Cloudflare ranges only, `51820/udp` open, SSH on `wg0` only; brute-force protection ~50 MB | fail2ban |
 | Admin network | **wg-portal** (WireGuard, `wg0` `10.10.0.0/24`, web UI `vpn.nigu.in`, OIDC via Authelia) | SSH, DBX, logs; later inter-VPS DB traffic (static peers) | Tailscale, NetBird |
-| DNS + CDN | **Cloudflare free** for `nigu.in`, `erpos.in`, `schooledu.in`; DNS-only `A` per VPS node, proxied `CNAME` per tenant; managed by Ansible (`community.general.cloudflare_dns` + Cloudflare API) | Static asset caching, DDoS protection, instant tenant moves; `.in` supported (§3.3, §3.4) | Registrar DNS |
+| DNS + CDN | **Cloudflare free** for `nigu.in`, `erpos.in`, `schooledu.in`; nigu-lite-managed DNS-only `A` per VPS node and proxied tenant/service `CNAME`s managed by Ansible (`community.general.cloudflare_dns` + Cloudflare API); public-site records remain separate | Static asset caching, DDoS protection, instant tenant moves; `.in` supported (§3.3, §3.4) | Registrar DNS |
 | Swap | 4 GB swapfile, `vm.swappiness=10` | Safety net during ERPNext migrations | — |
 
 ### 4.2 Data & Database Access (`core/`)
@@ -291,6 +336,14 @@ flowchart LR
   M1 -->|yes| M2{"authelia<br/>forwardAuth"}
   M2 -->|"not admin/ops"| D2[Redirect / 403]
   M2 -->|ok| M3["dbx-trusted-auth<br/>set X-DBX-Auth"] --> X["DBX Web<br/>internal network only"]
+  class B user
+  class T,M3 edge
+  class X core
+  class D1,D2 fail
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef fail fill:#ffcdd2,stroke:#c62828,color:#1a1a1a
 ```
 
 ```yaml
@@ -459,6 +512,12 @@ flowchart LR
   ST --> R[restic]
   R -->|"encrypted, prefix vps-01/"| S3[("Object store")]
   S3 -->|"make tenant-restore, restore-test"| RS["Restore one tenant"]
+  class ERP app
+  class R core
+  class MDB,ID,UP,ST,S3 data
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 **Object-store adapter.** Only **S3-compatible** stores are supported; for those, the S3 API is the adapter and no custom code is needed. Not every provider's object store speaks S3, and "S3-compatible" stores differ in details (addressing style, regions, Object Lock, multipart limits, key scoping).
@@ -546,6 +605,12 @@ flowchart LR
   F --> RB["/srv/gibbon/school-b"]
   RA --> DA[(gibbon_school_a)]
   RB --> DB[(gibbon_school_b)]
+  class A,B,T edge
+  class F,RA,RB app
+  class DA,DB data
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 - School URLs: `https://<school>.schooledu.in/` serves Gibbon directly. Configure Gibbon's canonical URL as the school hostname and install it at `/srv/gibbon/<school>`; there is no public website path or subfolder rewrite. ERP remains `<company>.erpos.in`. Paid custom domains later use the same Gibbon-only routing model (`tenant.yml` → `custom_domains`), designed in an LLD.
@@ -554,7 +619,7 @@ flowchart LR
 - TLS (`tls.mode` in the VPS manifest, required, no default in code):
   - `selfsigned`: Traefik default certificate from a platform CA; local, CI and rehearsals. Pre-filled by the manifest template.
   - `letsencrypt-staging`: real ACME flow with untrusted certificates and much higher limits; first deploy of a new VPS. Cloudflare must be set to **Full** (not strict) for that VPS's hosts meanwhile, or use DNS-only test hostnames.
-  - `letsencrypt`: production. Traefik ACME **DNS-01** with the Cloudflare provider (`cf_acme_token`). **One certificate per VPS** with SANs = the wildcards of the zones it serves + its node name, e.g. `*.erpos.in`, `*.schooledu.in`, `vps01.nigu.in` (+ `*.nigu.in` on the control plane). Wildcards make tenant onboarding certificate-free; the node name makes each VPS's identifier set unique, so Let's Encrypt's "5 identical certificates per week" limit applies per VPS, not shared.
+  - `letsencrypt`: production. Traefik ACME **DNS-01** with the Cloudflare provider (`cf_acme_token`). **One certificate per VPS** with SANs = the wildcards of the zones it serves + its node name, e.g. `*.erpos.in`, `*.schooledu.in`, `vps01.nigu.in` (+ `*.nigu.in` on the control plane). Wildcards make tenant onboarding certificate-free; the node name makes each VPS's identifier set unique, so Let's Encrypt's "5 identical certificates per week" limit applies per VPS, not shared. The separately hosted provider website manages its own apex certificate.
   - `acme.json` is on a persistent volume and backed up; redeploys reuse it. Rehearsals use `selfsigned`.
   - The validator rejects `environment: production` without `letsencrypt`.
 
@@ -631,6 +696,10 @@ flowchart LR
   W --> F[Remove old container]
   C -. fails .-> RB[Rollback:<br/>route back + restore]
   W -. fails .-> RB
+  class B,CI tool
+  class RB fail
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
+  classDef fail fill:#ffcdd2,stroke:#c62828,color:#1a1a1a
 ```
 
 | Step | Where | What | Gate |
@@ -694,8 +763,10 @@ nigu-lite/
 │   └── workflows/                    # build.yml, iac-security.yml, publish.yml, integration.yml, retention.yml (§7.5)
 ├── docs/
 │   ├── adr/  sdd/  lld/  developer/
+│   ├── diagram-style.md              # single source of mermaid classDef/style lines (§11.6)
 │   └── templates/                    # README, ADR, SDD, LLD, dev doc, tenant, VPS manifest
 ├── scripts/                          # cross-product scripts called by Makefile
+│   ├── setup/                        # make setup / make doctor: one step file per developer dependency
 │   ├── hooks/                        # commit-msg hook (installed by make setup)
 │   └── ci/                           # catalog.py, plan.py, report.py (same code locally and in CI)
 ├── policy/iac/                       # conftest Rego rules + accepted.yml (reason + expiry per accepted finding)
@@ -759,6 +830,12 @@ flowchart LR
   C --> H{"_health per tenant"}
   H -->|fail| F["Deploy fails, lists tenants"]
   H -->|ok| D[Done]
+  class C app
+  class M,T,VS,CI,L,A tool
+  class X,F fail
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
+  classDef fail fill:#ffcdd2,stroke:#c62828,color:#1a1a1a
 ```
 
 - The manifest **selects**; `tenants/<id>/tenant.yml` **defines** (domains, features and Gibbon branding).
@@ -799,6 +876,10 @@ flowchart LR
   C -->|none| H["/_health"]
   C -->|yes| A["Apply in order<br/>record id + checksum"] --> H
   A -. fails .-> R["Stop, restore snapshot,<br/>tenant stays on previous package"]
+  class P app
+  class R fail
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef fail fill:#ffcdd2,stroke:#c62828,color:#1a1a1a
 ```
 
 Rules: forward-only (no down scripts; rollback = restore the snapshot); a changed checksum of an applied migration fails validation (write a new migration instead); no secrets and no real personal data (synthetic or tenant-approved reference data only); `sqlfluff` (MariaDB dialect) in pre-commit; integration tests apply every migration of the test tenants on a fresh database and on one upgraded from the previous product version. During a product upgrade, the product's own DB update runs first, then pending tenant migrations that require the new version.
@@ -807,9 +888,11 @@ Rules: forward-only (no down scripts; rollback = restore the snapshot); a change
 
 | Target | Purpose |
 |---|---|
-| `setup` | `mise install`, galaxy deps, `pre-commit install` |
+| `setup` | Install everything a developer machine needs, idempotent: runs `scripts/setup/steps/*` (Homebrew on macOS, OS packages, mise, shell activation, `.tool-versions` tools, git hooks; later Docker, Ansible Galaxy deps …) |
+| `doctor` | Same steps in check-only mode; reports what is missing, changes nothing |
 | `lint` | `pre-commit run --all-files` + Ansible syntax checks |
 | `scan` | Trivy fs + config + secret; `scan-images` for built images |
+| `check-docs` / `fix-docs` | Check AGENTS index, instruction files, templates and mermaid rules / first copy diagram styles from `docs/diagram-style.md` (§11.6) |
 | `test-unit` | Validators, template rendering |
 | `local-up` / `local-down` / `local-reset` | Start/stop/wipe the local VPS simulator |
 | `local-deploy` | Run real playbooks with `deployments/local.yml` |
@@ -861,6 +944,10 @@ flowchart LR
   PUB --> GHCR[("GHCR, public")]
   GHCR --> DEP["make deploy VPS="]
   IT -->|"must be green"| DEP
+  class GHCR data
+  class PR,B1,SEC,MG,PUB,IT,TAG,DEP tool
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 - **PR:** build and scan only, no push. **Merge to `main`:** push `sha-` tags, signed. **Git tag `vX.Y.Z`:** release with versioned tags, notes from PR titles, tenant tarballs. Workflow and job design: §7.5.
@@ -898,6 +985,8 @@ flowchart LR
   PLAN --> M1["matrix job(s)<br/>one leg per module / tenant / VPS"]
   PLAN --> Q["side jobs<br/>(quality, release …)"]
   M1 & Q --> REP["report<br/>Markdown + HTML artifact,<br/>job summary, final status"]
+  class CAT,PLAN,M1,Q,REP tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 #### Catalog and plan (shared)
@@ -915,6 +1004,8 @@ flowchart LR
   PLAN --> MB["build-modules (matrix)<br/>image: build, Trivy, SBOM<br/>tenant: package dry-run"]
   CAT --> QA["quality<br/>pre-commit, unit tests,<br/>Trivy fs/secret, PR rules"]
   MB & QA --> REP["report"]
+  class CAT,PLAN,MB,QA,REP tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 | Job | Needs | Does | Fails on |
@@ -935,6 +1026,8 @@ flowchart LR
   PLAN --> ERP["tenants-erp (matrix)<br/>site config, routes,<br/>compose, DB grants"]
   PLAN --> VPS["vps-hosts (matrix)<br/>host + core config"]
   EDU & ERP & VPS --> REP["report<br/>new vs accepted findings"]
+  class PLAN,EDU,ERP,VPS,REP tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 | Job | Matrix | Checks (KICS + conftest + Trivy config) |
@@ -958,6 +1051,8 @@ flowchart LR
   PI & PT --> LOCK["lock-vps (matrix)<br/>resolve digests,<br/>verify signatures"]
   LOCK --> REL["release<br/>(tags only)"]
   LOCK & REL --> REP[report]
+  class PLAN,PI,PT,LOCK,REL,REP tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 | Job | Matrix | Does |
@@ -1105,7 +1200,7 @@ jobs:
 |---|---|
 | Model | `local/Dockerfile`: Ubuntu 24.04 + systemd + sshd + Docker Engine. Ansible connects over SSH exactly as to a real VPS. Docker-in-Docker. |
 | Runtime | Default: `--privileged` container with its own `/var/lib/docker` volume. Preferred if available: **Sysbox** runtime (`--runtime=sysbox-runc`), which runs systemd + Docker without `--privileged`. |
-| Fidelity gaps | UFW/iptables, swap, sysctl and kernel tuning do not fully apply inside a container. Tagged `host_kernel` and skipped locally. For full fidelity: `make local-vm` using **Multipass** or libvirt (reusing ideas from `infra-core`). |
+| Fidelity gaps | UFW/iptables, swap, sysctl and kernel tuning do not fully apply inside a container. Tagged `host_kernel` and skipped locally. For full fidelity: `make local-vm` using **Multipass** or libvirt. |
 | DNS | `*.localhost` (resolves to 127.0.0.1 in browsers) or `*.lvh.me`/`nip.io` for tools; hostnames come from test tenants. |
 | TLS | `tls.mode: selfsigned` in `deployments/local.yml`. Optional **Pebble** (local ACME test server) to exercise the ACME path. |
 | Cloudflare | `dns.provider: none`: Cloudflare role not run; its rendered API payloads are unit-tested; first real run in S6 |
@@ -1113,6 +1208,7 @@ jobs:
 | Object store | **MinIO** container in the simulator (same `object_store` config block, `endpoint: http://minio:9000`); bucket created by Ansible via the S3 API |
 | Data | Test tenants with synthetic data only; `make local-reset` wipes everything. |
 | Resources | Recommended developer machine: 16 GB RAM (simulator capped at ~8 GB like the VPS). |
+| Prerequisites | None by hand: S2 adds a Docker Engine step to `make setup` (§7.3); `make doctor` reports what is missing. |
 
 ```mermaid
 flowchart LR
@@ -1121,6 +1217,14 @@ flowchart LR
   SIM --> STACK[Same Compose stacks<br/>+ test tenants]
   STACK -->|backups| MINIO[(MinIO)]
   DEV -->|make test-integration / bench| STACK
+  class DEV user
+  class STACK app
+  class MINIO data
+  class SIM,ANS tool
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 ---
@@ -1208,6 +1312,8 @@ flowchart TD
   D -->|yes| S{"Surface contains<br/>tenant data?"}
   S -->|yes| N
   S -->|no| A["Evaluate limited ERP placement<br/>via nigu_ads"]
+  class N fail
+  classDef fail fill:#ffcdd2,stroke:#c62828,color:#1a1a1a
 ```
 
 ### 10.1 Options
@@ -1274,6 +1380,8 @@ flowchart LR
   AG -->|"task: tests, feature, git, upgrade…"| IF[".github/instructions/<br/>one 20–30 line file"]
   IF --> W["Change code + tests + docs"]
   W -->|"convention changed?"| MT["instructions-maintenance:<br/>update file + AGENTS index"]
+  class TOOL,AG,IF,MT tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 Each file in `.github/instructions/` is **20–30 lines**, named `*.instructions.md`, with `applyTo` front matter where a file pattern fits (Copilot auto-attaches; Roo Code follows the index). Nothing large goes in `.roo/rules/`; Roo loads that folder on every request.
@@ -1300,12 +1408,13 @@ Each file in `.github/instructions/` is **20–30 lines**, named `*.instructions
 | `github-actions.instructions.md` | Editing `.github/workflows/*` or `scripts/ci/*` | §7.5: catalog → plan → matrix → report; jobs call `make`; SHA pins; per-job permissions; timeouts; report artifacts; advisory vs blocking |
 | `security.instructions.md` | Secrets, ports, personal data, ads | Vault, exposure rules, ad guard-rails |
 | `local-env.instructions.md` | Local simulator | `make local-*`, `host_kernel` tag, `tls.mode: selfsigned`, MinIO |
+| `dev-setup.instructions.md` | Adding a tool, runtime or system package developers need | Zero manual setup: every new dependency ships with its `make setup` step (`.tool-versions` pin first, step file only when mise cannot install it); idempotent check/install; `make doctor` |
 | `instructions-maintenance.instructions.md` | After any change that alters a convention | **Self-update rules** (below) |
 
 ### 11.2 Self-updating instructions
 
 The AI must update instructions in the same PR when:
-- a new tool, directory, Make target, product type or convention is introduced or removed;
+- a new tool, directory, Make target, product type or convention is introduced or removed (a new developer dependency also gets its `make setup` step, `dev-setup.instructions.md`);
 - an instruction turned out wrong, missing or contradicted by the code;
 - the same review comment appears twice.
 
@@ -1322,7 +1431,7 @@ Rules:
 | README | Every product, tenant, `tests/`, `deployments/`, `local/` | Always; from `docs/templates/README.template.md` |
 | LLD | `docs/lld/<area>.md` | **Before implementing** any feature or moderate change. One LLD usually covers several PRs and is updated in the PRs that change the design |
 | ADR | `docs/adr/NNNN-title.md` | **Rare**: release- or sprint-level decisions only (criteria below) |
-| SDD | `docs/sdd/` | System boundaries, products, trust zones change (usually alongside an ADR) |
+| SDD | `docs/sdd/` | System boundaries, products, trust zones change (usually alongside an ADR); IEEE 1016 structure with a requirements traceability matrix |
 | Developer docs | `docs/developer/` | Setup, workflows, runbooks, troubleshooting |
 
 ```mermaid
@@ -1332,6 +1441,8 @@ flowchart LR
   FEAT["Feature or<br/>moderate change"] --> LLD["LLD<br/>(written first)"]
   LLD --> PR1[PR 1] & PR2[PR 2] & PR3[PR …]
   PR2 -.->|updates design| LLD
+  class REL,ADR,FEAT,LLD,PR1,PR2,PR3 tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 **LLD lifecycle**
@@ -1382,6 +1493,10 @@ supersedes: <NNNN or none>
 ```mermaid
 flowchart LR
   A[Today: component] --> B[(Dependency)]
+  class A app
+  class B data
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Considered options
@@ -1395,10 +1510,18 @@ Chosen: **<option>**, because <one-sentence justification tied to the drivers>.
 ### Proposed solution
 ```mermaid
 flowchart LR
-  A[Today: component] --> N[New component]:::new --> B[(Dependency)]
-  X[Old part]:::removed
-  classDef new fill:#d9f7d9,stroke:#2e7d32
-  classDef removed fill:#fde0e0,stroke:#c62828,stroke-dasharray:4 3
+  A[Today: component] --> N["[+] New component"] --> B[(Dependency)]
+  A -.-> X["[-] Old part"]:::removed
+  linkStyle 0,1 stroke:#2e7d32,stroke-width:2px
+  linkStyle 2 stroke:#9e9e9e,stroke-dasharray:5 4
+  class A app
+  class N core
+  class B data
+  style N stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef removed fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray:5 4,color:#757575
 ```
 
 ### Consequences
@@ -1431,7 +1554,7 @@ reviewers: <names>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 related-adrs: [<NNNN>]      # usually empty or 0001
-issues: [#<n>]
+issues: ["#<n>"]
 products: [core|erp|edu]
 ---
 
@@ -1454,16 +1577,28 @@ products: [core|erp|edu]
 ```mermaid
 flowchart LR
   A[Existing] --> B[(Dependency)]
+  class A app
+  class B data
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## 5. Proposed design
 ### 5.1 Overview
 ```mermaid
 flowchart LR
-  A[Existing] --> N[New component]:::new --> B[(Dependency)]
-  X[Old part]:::removed
-  classDef new fill:#d9f7d9,stroke:#2e7d32
-  classDef removed fill:#fde0e0,stroke:#c62828,stroke-dasharray:4 3
+  A[Existing] --> N["[+] New component"] --> B[(Dependency)]
+  A -.-> X["[-] Old part"]:::removed
+  linkStyle 0,1 stroke:#2e7d32,stroke-width:2px
+  linkStyle 2 stroke:#9e9e9e,stroke-dasharray:5 4
+  class A app
+  class N core
+  class B data
+  style N stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef removed fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray:5 4,color:#757575
 ```
 ### 5.2 Components and responsibilities
 | Component | Change | Responsibility | Location (path) |
@@ -1523,7 +1658,7 @@ sequenceDiagram
 |---|---|---|
 ````
 
-**Diagram rules (ADR and LLD):** "Existing" and "Proposed" diagrams use the same node names and layout for unchanged parts, so the difference is visible at a glance; mark new nodes with `:::new` (green) and removed ones with `:::removed` (red, dashed); the `classDef` lines come with the template. Max ~10 nodes each; detail goes into §5.3 flows.
+**Diagram rules (ADR and LLD):** "Existing" and "Proposed" diagrams use the same node names and layout for unchanged parts, so the difference is visible at a glance; mark new nodes `:::new` with a `[+]` label and removed ones `:::removed` with a `[-]` label; removed links `-.->`, added links green via `linkStyle`; component colours, subgraph `style` and `classDef` lines per §11.6. Max ~10 nodes each; detail goes into §5.3 flows.
 
 ### 11.4 README template (`docs/templates/README.template.md`)
 
@@ -1536,6 +1671,12 @@ sequenceDiagram
 ```mermaid
 flowchart LR
   A[Caller] --> B[This component] --> C[(Dependency)]
+  class A user
+  class B app
+  class C data
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Quick start
@@ -1568,6 +1709,8 @@ flowchart LR
   PR --> CI["build.yml checks<br/>+ advisory IaC report"]
   CI --> SQ["Squash merge (main ruleset)<br/>PR title becomes the commit"]
   SQ --> POST["Post-merge workflows (§7.4)"]
+  class B,CM,PR,CI,SQ,POST tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 **Branches:** `<prefix>/<short-slug>`, optionally with the issue number (`feature/42-tenant-manifest`).
@@ -1595,12 +1738,42 @@ flowchart LR
 
 - `.github/pull_request_template.md` sections:
   1. **Summary**: what and why
-  2. **Change diagram** (required for architecture, deployment or data-flow changes; optional otherwise): small mermaid flowchart or sequence diagram, ≤ 10 nodes, showing what is being merged
+  2. **Change diagram** (required for architecture, deployment or data-flow changes; optional otherwise): small mermaid flowchart or sequence diagram, ≤ 10 nodes, showing what is being merged; the template's example shows an added component (`[+]`, component class, green border and link) and a removed one (`[-]`, greyed out, grey dotted link) (§11.6)
   3. **Changes**: bullet list by product (`core`/`erp`/`edu`/…)
   4. **Tests**: commands run (`make lint test-unit scan test-integration`), new/updated tests, benchmark links
   5. **Docs & instructions updated**: LLD link (required for features), READMEs, `.github/instructions/*`; "ADR proposed" only if §11.3 criteria apply
   6. **Risk, rollback & data impact**: tenants affected, backup/restore notes
   7. **Checklist**: no secrets/real data, upstream code untouched, Trivy clean or justified
+
+### 11.6 Diagram colours
+
+Every flowchart in this plan, READMEs, SDDs, ADRs, LLDs and PRs uses one palette, so a colour always means the same kind of component. Colour by **what a node is**, not by where it runs.
+
+| Class | Colour | Use for | Examples |
+|---|---|---|---|
+| `user` | grey | People and external clients | School staff, business users, platform staff, browser |
+| `edge` | orange | Traffic entry and network access | Cloudflare, Traefik, wg-portal, DNS records, hostnames |
+| `app` | blue | Tenant-facing applications | Gibbon (FrankenPHP), ERPNext bench, tenant packages |
+| `core` | purple | Shared platform services | LLDAP, Authelia, Beszel, DBX, restic backups, Grafana |
+| `data` | teal | Data stores and registries | MariaDB, SQLite volumes, object store, GHCR |
+| `tool` | yellow | Repo, CI and operator tooling | GitHub Actions, Ansible, Make targets, manifests, AI tools |
+| `fail` | red | Runtime failure, deny and rollback outcomes | 403, "Stop", rollback |
+| `new` | green, green dashed border | Change diagrams only (SDD, ADR, LLD, PR): an added **untyped** step that has no component class; label starts with `[+]` | `S["[+] Nightly restore drill"]:::new` |
+| `removed` | grey fill, grey dashed border, grey text | Change diagrams only: removed or deprecated node (it no longer exists in the target design); label starts with `[-]` | `X["[-] Docker Swarm"]:::removed` |
+
+An **added component** keeps its component class (`edge`, `app`, `core`, `data`, `tool`), so the reader still sees what kind of thing it is. It is marked by a `[+]` label, green added links and a thick green dashed border: `style <node_id> stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3` (e.g. `N["[+] Authelia"]` with `class N core`).
+
+**Single source:** [docs/diagram-style.md](docs/diagram-style.md) holds the `classDef` lines, the subgraph and added-node `style` lines and the added/removed `linkStyle` lines, and renders as a legend. GitHub cannot import styles from another file, so each diagram carries a copy of the lines it uses; authors write only `class` lines (plus `:::new` / `:::removed`) and `linkStyle` lines, and `make fix-docs` adds, corrects and removes the `classDef` lines, the subgraph `style` lines and the green border `style` of added component nodes. `make check-docs` reads the same file and rejects unknown classes, changed colours and `linkStyle` indexes that do not point at a matching link. To change a colour, edit only that file and run `make fix-docs`. Dark text keeps nodes readable in light and dark previews; `removed` is fully greyed out so it does not look like a `fail` path.
+
+Rules (all checked by `make check-docs`):
+
+- **Uncoloured:** plain steps, `{decision}` diamonds and sequence diagrams (no `rect` highlights), so control flow stays distinct from components.
+- **Subgraphs** (VPS, networks, tenant stacks, nested or not) give every container an id (`subgraph VPS["…"]`) and stay transparent with one standard border: `style <subgraph_id> fill:transparent,stroke:#78909c,stroke-width:1.5px`. The only other allowed `style` is the added-node border `style <node_id> stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3`; colour nodes with classes.
+- **Markers, not colour alone:** added nodes need a quoted label starting with `[+]`, removed nodes `[-]`, so the diagram still reads correctly in monochrome or for colour-blind readers. `new` is never combined with a component class; `removed` is never combined with any other class.
+- **Change arrows (SDD, ADR, LLD, PR):** added links: `linkStyle <index> stroke:#2e7d32,stroke-width:2px`; removed links: dotted `-.->` with `linkStyle <index> stroke:#9e9e9e,stroke-dasharray:5 4`, matching the greyed-out removed nodes. The index is the order of the link in the diagram, from 0 (`A & B --> C` counts as two links); comma-separate several. Inside change diagrams `-.->` means "removed" only; other diagrams may use it for optional or failure paths. No other `linkStyle` is allowed.
+- Assign classes at the end of the diagram (`class GIB,ERP app`) rather than inline, except `:::new` / `:::removed` next to their marked labels; `make fix-docs` appends the `style` and `classDef` lines after them.
+
+The legend in `docs/diagram-style.md` shows every class, a subgraph, an added and a removed link, a plain step and a decision.
 
 ---
 
@@ -1614,13 +1787,21 @@ flowchart LR
   S3 --> S4["S4 Edu: Gibbon"]
   S3 --> S5["S5 ERP"]
   S4 & S5 --> S6["S6 First VPS"] --> S7["S7 Ads"] --> S8["S8 Scale-out"]
+  class S6 edge
+  class S4,S5 app
+  class S3,S8 core
+  class S0,S1,S2 tool
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 | Stage | Work items | Exit criteria |
 |---|---|---|
-| **S0 — Repo foundation** (single initial commit) | Create public repo (`main`, AGPL-3.0 `LICENSE`, `SECURITY.md`); `AGENTS.md` + `.github/instructions/*`; `.editorconfig`, `.gitattributes`, `.gitignore`, `.tool-versions`, `.pre-commit-config.yaml`; Makefile skeleton; `docs/templates/*` (README, ADR, SDD, LLD, tenant, VPS manifest); PR template with mermaid section; `commit-msg` hook + branch rules; `versions.yml`; baseline ADR `0001-platform-baseline.md` (D1–D27) and LLD template; root/product READMEs; repo settings (squash only, secret scanning + push protection, Dependabot alerts, private vulnerability reporting) | `make setup lint` passes on a clean clone; templates render; AGENTS index matches files |
+| **S0 — Repo foundation** (single initial commit) | Create public repo (`main`, AGPL-3.0 `LICENSE`, `SECURITY.md`); `AGENTS.md` + `.github/instructions/*`; `.editorconfig`, `.gitattributes`, `.gitignore`, `.tool-versions`, `.pre-commit-config.yaml`; Makefile skeleton; `docs/templates/*` (README, ADR, SDD, LLD, tenant, VPS manifest); PR template with mermaid section; `commit-msg` hook + branch rules; `make setup` / `make doctor` with `scripts/setup/steps/*` (zero manual developer setup); `versions.yml`; baseline ADR `0001-platform-baseline.md` (D1–D27) and LLD template; root/product READMEs; repo settings (squash only, secret scanning + push protection, Dependabot alerts, private vulnerability reporting) | `make setup lint` passes on a clean clone; templates render; AGENTS index matches files |
 | **S1 — CI, scanning, manifests, unit tests** | `scripts/ci/` catalog, plan and report (+ unit tests); `build.yml`, `iac-security.yml`, `publish.yml`, `retention.yml` (§7.5); pre-commit incl. actionlint/zizmor; Trivy fs/config/secret + SARIF upload; KICS + conftest evaluation; PR title/branch checks; publish with ORAS + keyless cosign, proven with the `local-vps` image and a test tenant package; Renovate (`patch/` branches); manifest schema + validator; Jinja2 render tests; test tenant skeletons in `tests/tenants/`; enable the `main` ruleset (§7.4) | CI green; invalid manifests fail before remote tasks; deploy without `VPS=` fails; each workflow uploads `report.md` + `report.html`; a docs-only PR builds no modules; a direct push to `main` is rejected |
-| **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); `deployments/local.yml`; `tls.mode` (self-signed); MinIO; `make local-up/down/reset/deploy` | Fresh clone → `make local-up local-deploy` gives a running edge with a test route |
+| **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); Docker Engine `make setup` step; `deployments/local.yml`; `tls.mode` (self-signed); MinIO; `make local-up/down/reset/deploy` | Fresh clone → `make local-up local-deploy` gives a running edge with a test route |
 | **S3 — Core platform** | Host baseline roles (`host_kernel` tagged), Traefik (file provider, `selfsigned`, ACME DNS-01 resolver), MariaDB, LLDAP (groups `admin`/`ops`/`support`), Authelia (access rules + OIDC policies), wg-portal (OIDC), Beszel, Dozzle, DBX with the protection chain + LDAP Studio, backups (restic → S3), `db-shell`, `s3-ls`; Cloudflare role (render + check mode only) | Integration tests: health, per-tenant DB provisioning, backup → restore, **access matrix §13.1**, Traefik sees `10.10.0.x` client IPs in the local env |
 | **S4 — Edu: Gibbon spike then pilot** | Spike: FrankenPHP image + pinned Gibbon + `tenant-guard.php`; isolation tests (cross-tenant file/DB/session access must fail); verify Gibbon root-path compatibility; benchmark vs per-school containers. Pilot: per-school Traefik host routers + Caddy blocks from manifest; tenant assets + SQL migrations from signed packages; per-school `/_health` + Traefik health checks; side-by-side versions + `make upgrade-test` | Isolation suite passes, or fallback (D7) is decided by ADR; benchmark results committed; two test schools pass integration and host-routing tests (§9); an unhealthy test school does not affect the other; upgrade + rollback drill passes; `edu-*` benchmarks recorded against §9.1 |
 | **S5 — ERP pilot** | ERPNext + India Compliance image (Trivy-scanned, SBOM); multi-site bench; site lifecycle (create/restore/retire) from manifest; tenant JSON migrations via REST API + `Nigu Migration` DocType; assets; SMTP | Two test companies; GSTR report on synthetic data; per-site restore; `erp-*` benchmarks recorded against §9.1 |
@@ -1690,7 +1871,7 @@ flowchart LR
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Domains | ERP `erpos.in`; edu `schooledu.in` (Gibbon only); control plane and platform home `nigu.in`. Custom school domains later, paid (§5.1) |
+| 1 | Domains | ERP `erpos.in`; edu `schooledu.in` (Gibbon only); `nigu.in` is the SaaS provider's brand and control-plane domain. Its apex/`www` public website may be hosted separately and is outside nigu-lite. Custom school domains later, paid (§5.1) |
 | 2 | TLS | Let's Encrypt only in production (DNS-01 wildcard per VPS, Cloudflare Full strict); `selfsigned` locally (D9, §5.1) |
 | 3 | India Compliance credits | Platform-funded only if a compliant ERP revenue source is approved; otherwise tenant brings own |
 | 4 | School sponsor revenue share | Not applicable: public school websites and school sponsorship inventory are out of scope |
@@ -1706,11 +1887,4 @@ flowchart LR
 
 ### Remaining questions
 
-1. WireGuard staff subnet `10.10.0.0/24` and VPS peer subnet `10.10.1.0/24`: OK, or do they clash with networks your devices use?
-2. What does `nigu.in` (apex) show: a product landing page for both offerings, or a redirect?
-
----
-
-## Appendix — Prior art (reference only)
-
-`infra` (Swarm-based playbooks: Traefik, Keycloak, OpenLDAP, NetBird, ERPNext) and `infra-core` (libvirt VM creation) are references for ideas only, such as ERPNext site init, Traefik middleware and VM provisioning for `make local-vm`. Nothing is migrated. A Docker Hub token is committed in `infra`; revoke it independently of this plan.
+1. Confirm the proposed WireGuard ranges do not overlap with networks used by the operator's home, office, or VPN connections: staff devices use `10.10.0.0/24`, and VPS peers use `10.10.1.0/24`. An overlap can make traffic route to the wrong network; these ranges are provisional until checked.

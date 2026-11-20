@@ -9,6 +9,8 @@ flowchart LR
   M["make test-unit"] --> U["tests/unit<br/>scripts, validators"]
   M2["make test-integration (S2+)"] --> I["tests/integration<br/>local VPS + test tenants"]
   M3["make bench (S4+)"] --> B["tests/benchmarks<br/>k6 scenarios"]
+  class M,M2,M3 tool
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 ## Quick start

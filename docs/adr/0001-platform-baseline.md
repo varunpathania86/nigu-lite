@@ -24,13 +24,12 @@ Detail and evidence: [master-plan.md](../../master-plan.md) §1–§4.
 - Free tooling (public repo, Cloudflare free plan, FOSS components).
 
 ## Existing solution
-None (greenfield). Prior art in the `infra` (Swarm playbooks) and `infra-core` (VM provisioning)
-repositories is reused as ideas only.
+None (greenfield). A Docker Swarm design was considered on paper and rejected (option 2).
 
 ```mermaid
 flowchart LR
-  OLD["Docker Swarm across VPSs"]:::removed
-  classDef removed fill:#fde0e0,stroke:#c62828,stroke-dasharray:4 3
+  OLD["[-] Docker Swarm across VPSs"]:::removed
+  classDef removed fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray:5 4,color:#757575
 ```
 
 ## Considered options
@@ -70,7 +69,7 @@ need a new ADR that supersedes the affected decision only (master-plan.md §11.3
 | D21 | **Plain-sentence commit messages and PR titles**, branch prefixes `feature/`, `bugfix/`, `patch/`, … | Conventional Commits | Commit message / PR title becomes the GitHub Actions run name; must read cleanly (§11.5). |
 | D22 | **S3-compatible object stores only** (`object_store.type: s3`); MinIO locally, Contabo/B2/R2 in production | Custom adapter layer; provider-native APIs from day one | restic and rclone speak S3; between S3-compatible providers, switching = endpoint + keys. Non-S3 stores (e.g. Azure Blob, native GCS, Swift) need an ADR and a new `type` (§4.5). |
 | D23 | **Public repo `nigu-lite` under AGPL-3.0**; public GHCR packages; keyless cosign signing (GitHub OIDC); `main` protected by a ruleset | Private repo on GitHub Free | Free Actions minutes, free public package storage (ERPNext image size no longer a cost), free rulesets and code scanning; AGPL keeps hosted forks open and is compatible with GPL-3.0 upstream code. Everything in the repo and its packages is public: no secrets except Vault-encrypted files, no personal data (§7.4, §13). |
-| D24 | **Cloudflare free plan** for DNS, CDN and DDoS on `nigu.in`, `erpos.in`, `schooledu.in`; two-tier records (DNS-only `A` per VPS node, proxied tenant `CNAME`s); managed by Ansible via API | Registrar DNS; wildcard records; Cloudflare Tunnel | Offloads static assets and attacks from 8 GB VPSs; tenant moves = one CNAME change, effective at the edge in seconds; no extra container (§3.4). |
+| D24 | **Cloudflare free plan** for DNS, CDN and DDoS on `nigu.in`, `erpos.in`, `schooledu.in`; nigu-lite manages only its VPS, service and tenant records (DNS-only `A` per VPS node, proxied tenant `CNAME`s); public-site records are separate; managed by Ansible via API | Registrar DNS; wildcard records; Cloudflare Tunnel | Offloads static assets and attacks from 8 GB VPSs; tenant moves = one CNAME change, effective at the edge in seconds; no extra container (§3.4). |
 | D25 | **wg-portal** (WireGuard + web UI with OIDC via Authelia) at `vpn.nigu.in`, on the control-plane VPS | Tailscale / NetBird, plain WireGuard configs | Self-hosted, one small container, standard WireGuard clients, self-service `.conf`/QR for `ops`/`admin` (§4.3). |
 | D26 | **Group-based access for platform staff** (LLDAP `admin`/`ops`/`support` → Authelia rules + OIDC policies); **tenant routers never get Authelia forwardAuth**; all tenant users, including heads/admins, use native app accounts | Authelia in front of tenant portals; LLDAP accounts for tenant users | Tenant SSO is deferred, with no scheduled rollout or tenant OIDC clients. Keeps tenant users isolated from the staff directory (§4.3, §13.1). |
 | D27 | **DBX behind VPN allow-list + Authelia + trusted-auth header**, password viewer disabled | DBX own logins; public DBX behind Authelia only | Two independent gates (network + identity) for the most sensitive tool (§4.2). |
@@ -78,13 +77,30 @@ need a new ADR that supersedes the affected decision only (master-plan.md §11.3
 ### Proposed solution
 ```mermaid
 flowchart LR
-  CF["Cloudflare"]:::new --> T["Traefik per VPS"]:::new
-  T --> G["Gibbon · one FrankenPHP container"]:::new
-  T --> E["ERPNext multi-site bench"]:::new
-  G & E --> C["core: MariaDB, LLDAP, Authelia,<br/>wg-portal, Beszel, DBX"]:::new
-  C --> S3[("S3 backups")]:::new
-  A["Ansible + Makefile"]:::new -->|"deployments/vps.yml"| T
-  classDef new fill:#d9f7d9,stroke:#2e7d32
+  CF["[+] Cloudflare"] --> T["[+] Traefik per VPS"]
+  T --> G["[+] Gibbon · one FrankenPHP container"]
+  T --> E["[+] ERPNext multi-site bench"]
+  G & E --> C["[+] core: MariaDB, LLDAP, Authelia,<br/>wg-portal, Beszel, DBX"]
+  C --> S3[("[+] S3 backups")]
+  A["[+] Ansible + Makefile"] -->|"deployments/vps.yml"| T
+  linkStyle 0,1,2,3,4,5,6 stroke:#2e7d32,stroke-width:2px
+  class CF,T edge
+  class G,E app
+  class C core
+  class S3 data
+  class A tool
+  style CF stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style T stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style G stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style E stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style C stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style S3 stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  style A stroke:#2e7d32,stroke-width:2.5px,stroke-dasharray:5 3
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
 ```
 
 ### Consequences

@@ -12,6 +12,16 @@ flowchart LR
   STAFF["Platform staff"] -->|"WireGuard + Authelia"| ID["identity: LLDAP, Authelia, wg-portal"]
   ID --> OPS["ops: Beszel, Dozzle, DBX"]
   DATA --> BK["backups: restic"] --> S3[("S3 object store")]
+  class STAFF user
+  class CF,EDGE edge
+  class APPS app
+  class ID,OPS,BK core
+  class DATA,S3 data
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef edge fill:#ffe0b2,stroke:#e65100,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
 ```
 
 ## Quick start

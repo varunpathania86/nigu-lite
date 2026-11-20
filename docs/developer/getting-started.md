@@ -11,12 +11,17 @@ updated: 2026-11-20
 
 ## Prerequisites
 
-- `git`, `make`, `docker` and [mise](https://mise.jdx.dev/) (`curl https://mise.run | sh`).
+- `git` and `make` to clone and start; `make setup` installs everything else (Ubuntu/Debian, Fedora,
+  macOS, or Windows via WSL2). If `make` is missing, run `bash scripts/setup/setup.sh`. On macOS it
+  also installs Homebrew and the Xcode Command Line Tools; your password is asked once for `sudo`.
 - Read [AGENTS.md](../../AGENTS.md); it indexes the rules for each kind of task.
 
 ## Steps
 
-1. `make setup`: installs the pinned tools from `.tool-versions` and the `pre-commit` + `commit-msg` hooks.
+1. `make setup`: installs Homebrew (macOS only), OS packages, [mise](https://mise.jdx.dev/), mise
+   shell activation, the pinned tools from `.tool-versions` and the `pre-commit` + `commit-msg`
+   hooks. Safe to re-run; open a new terminal afterwards. `make doctor` shows what is missing
+   without changing anything.
 2. Create a branch: `git switch -c feature/<short-slug>` (prefixes: `feature/`, `bugfix/`, `hotfix/`,
    `patch/`, `tenant/`, `docs/`, `chore/`).
 3. For a feature, write or extend the LLD first (`docs/lld/<area>.md`).
@@ -38,10 +43,12 @@ Nothing is deployable yet. Revert a commit with `git revert <sha>` on a branch a
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `mise: command not found` | mise not on `PATH` | Add `~/.local/bin` to `PATH`, then `eval "$(mise activate bash)"` |
+| `mise: command not found` | Terminal opened before `make setup` | Open a new terminal (or `source ~/.bashrc`); `make doctor` |
+| `make setup` stops at a step | That dependency could not be installed | Fix the printed error, re-run `make setup` (finished steps are skipped) |
 | `commit-msg: No type prefixes…` | Conventional-commit style message | Rewrite as a plain sentence |
 | `branch-name: Branch '…' must be…` | Branch prefix missing | `git branch -m feature/<slug>` |
 | `check-docs: … is not indexed in AGENTS.md` | New instruction file | Add a row to the AGENTS.md index |
+| `check-docs: … has no classDef` / `classDef … must be` | Diagram styles missing or hand-edited | `make fix-docs` (styles come from `docs/diagram-style.md`) |
 
 ## Related
 

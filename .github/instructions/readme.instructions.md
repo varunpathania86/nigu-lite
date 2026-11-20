@@ -17,5 +17,5 @@ applyTo: '**/README.md'
 - Tenant READMEs list role-based contacts only (e.g. "school office"); no names, phones or e-mails.
 - Use relative links; check they resolve after moving files.
 - Keep it short: an operator should find how to run, configure and test the folder in under a minute.
-- Run `make check-docs` and `make lint` (markdownlint, mermaid checks) before committing.
+- Run `make fix-docs` and `make lint` (mermaid checks, pre-commit) before committing.
 - List README changes under "Docs & instructions updated" in the PR.
