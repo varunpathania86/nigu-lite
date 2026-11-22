@@ -165,8 +165,6 @@ ci-report-dir: ## Export the Pages destination for the current ref
 	$(HOST_PYTHON) scripts/ci/pages.py destination --git-ref "$(GIT_REF)" --ref-name "$(REF_NAME)" \
 		$(if $(GITHUB_OUTPUT),--github-output "$(GITHUB_OUTPUT)",)
 
-ci-pages-configure: ## Ensure GitHub Pages publishes the gh-pages branch
-	$(HOST_PYTHON) scripts/ci/configure_pages.py --repository "$(REPOSITORY)"
 
 
 ci-report: ## Merge job fragments into Markdown, HTML and JSON
