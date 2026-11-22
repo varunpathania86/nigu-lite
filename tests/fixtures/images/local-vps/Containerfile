@@ -5,4 +5,5 @@ LABEL org.opencontainers.image.description="Service-free S1 local-vps OCI pipeli
 
 RUN printf 'Stage 1 package fixture only; no runtime service.\\n' >/opt/nigu-local-vps.txt
 USER 65532:65532
+HEALTHCHECK NONE
 CMD ["cat", "/opt/nigu-local-vps.txt"]

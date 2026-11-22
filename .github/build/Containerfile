@@ -71,8 +71,8 @@ RUN set -eux; \
 COPY .pre-commit-config.yaml /tmp/pre-commit-config.yaml
 ENV PRE_COMMIT_HOME=/opt/pre-commit-cache
 ENV TRIVY_CACHE_DIR=/opt/trivy-cache
-RUN mkdir /opt/pre-commit && cd /opt/pre-commit \
-    && git init -q \
+WORKDIR /opt/pre-commit
+RUN git init -q \
     && cp /tmp/pre-commit-config.yaml .pre-commit-config.yaml \
     && pre-commit install-hooks
 
@@ -86,4 +86,5 @@ ENV NIGU_BUILD_CONTAINER=1
 ENV HOME=/home/ubuntu
 USER 1000:1000
 WORKDIR /workspace
+HEALTHCHECK NONE
 ENTRYPOINT ["/bin/bash", "-lc"]
