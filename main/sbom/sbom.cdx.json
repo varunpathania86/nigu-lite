@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.7",
-  "serialNumber": "urn:uuid:697903c7-c362-4cf7-9fa4-1cbc87d4d6b0",
+  "serialNumber": "urn:uuid:b9d3b5d6-e3a3-445a-a177-c77d4f1e2ccc",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-22T23:04:32+00:00",
+    "timestamp": "2026-11-22T23:18:55+00:00",
     "tools": {
       "components": [
         {
@@ -20,7 +20,7 @@
       ]
     },
     "component": {
-      "bom-ref": "26e6b2e5-8939-449e-8b77-9dba5bcfa873",
+      "bom-ref": "b794a275-ecfa-4fd2-9b9f-561e666e91a2",
       "type": "application",
       "name": ".",
       "properties": [
@@ -33,7 +33,7 @@
   },
   "components": [
     {
-      "bom-ref": "73add23a-4e3f-4523-8d67-f148a91b73cb",
+      "bom-ref": "70e51860-e24c-47d5-9274-c6a4a31b5a75",
       "type": "application",
       "name": "requirements-ci.txt",
       "properties": [
@@ -190,13 +190,7 @@
   ],
   "dependencies": [
     {
-      "ref": "26e6b2e5-8939-449e-8b77-9dba5bcfa873",
-      "dependsOn": [
-        "73add23a-4e3f-4523-8d67-f148a91b73cb"
-      ]
-    },
-    {
-      "ref": "73add23a-4e3f-4523-8d67-f148a91b73cb",
+      "ref": "70e51860-e24c-47d5-9274-c6a4a31b5a75",
       "dependsOn": [
         "pkg:pypi/allure-pytest@2.16.2",
         "pkg:pypi/jsonschema@4.25.1",
@@ -205,6 +199,12 @@
         "pkg:pypi/pyyaml@6.0.3",
         "pkg:pypi/ruff@0.17.6",
         "pkg:pypi/zizmor@1.32.0"
+      ]
+    },
+    {
+      "ref": "b794a275-ecfa-4fd2-9b9f-561e666e91a2",
+      "dependsOn": [
+        "70e51860-e24c-47d5-9274-c6a4a31b5a75"
       ]
     },
     {
