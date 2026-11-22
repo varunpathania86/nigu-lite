@@ -8,9 +8,12 @@ from pathlib import Path
 from scripts.ci.catalog import catalog
 from scripts.ci.lock import build_lock
 from scripts.ci.package import MAX_PACKAGE_BYTES, package_tenant
+from scripts.ci.pages import report_directory, write_index
 from scripts.ci.plan import plan
 from scripts.ci.report import final_status, html_report, markdown_report
 from scripts.ci.retention import retention_plan
+from scripts.ci.sbom_html import components
+from scripts.ci.sbom_html import render as render_sbom
 from scripts.ci.snapshot import create_snapshot
 from scripts.manifests.validator import validate
 
@@ -161,6 +164,41 @@ class RetentionTests(unittest.TestCase):
         result = retention_plan(metadata, keep=1)
         self.assertEqual({item["digest"] for item in result["retain"]}, {"sha256:2", "sha256:3"})
         self.assertEqual([item["digest"] for item in result["candidates"]], ["sha256:1"])
+
+
+class PagesTests(unittest.TestCase):
+    def test_only_main_and_tags_are_publishable(self):
+        self.assertEqual(report_directory("refs/heads/main", "main"), "main")
+        self.assertEqual(report_directory("refs/tags/v1.2.3", "v1.2.3"), "tags/v1.2.3")
+        with self.assertRaises(ValueError):
+            report_directory("refs/heads/feature/test", "feature/test")
+
+    def test_landing_page_links_to_all_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            public = Path(temporary) / "public"
+            write_index(public)
+            page = (public / "index.html").read_text(encoding="utf-8")
+            self.assertIn("allure/", page)
+            self.assertIn("sbom/", page)
+            self.assertIn("security/", page)
+
+    def test_sbom_explorer_lists_packages_without_vulnerabilities(self):
+        document = {
+            "components": [
+                {
+                    "type": "library",
+                    "group": "example",
+                    "name": "demo",
+                    "version": "1.2.3",
+                    "purl": "pkg:pypi/example/demo@1.2.3",
+                    "licenses": [{"license": {"id": "Apache-2.0"}}],
+                }
+            ]
+        }
+        self.assertEqual(components(document)[0]["licenses"], "Apache-2.0")
+        page = render_sbom(document)
+        self.assertIn("demo", page)
+        self.assertIn("sbom.cdx.json", page)
 
 
 if __name__ == "__main__":

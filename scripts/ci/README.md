@@ -41,6 +41,7 @@ results to GitHub Actions step outputs.
 | `package.py` / `publish.py` | Package allow-list, registry push and signing |
 | `report.py` | Markdown, HTML and JSON report aggregation |
 | `lock.py` / `release.py` / `retention.py` | Digest locks, releases and pruning |
+| `allure.py` / `sbom_html.py` / `pages.py` | Allure, package inventory and Pages report generation |
 
 ## Configuration
 

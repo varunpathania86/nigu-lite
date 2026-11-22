@@ -588,7 +588,7 @@ MinIO's licensing and distribution changed in 2025 (community console reduced, o
 | Signing / publishing | **cosign** (keyless via GitHub OIDC, public Rekor log), **ORAS** | CI (`publish.yml`) | Signed images and tenant packages (§7.4) |
 | IaC policy (advisory) | **KICS** (Compose, Ansible, Dockerfile) + **conftest** (our Rego rules in `policy/iac/`) on **rendered** per-tenant / per-VPS config | CI (`iac-security.yml`), `make iac-scan` | Trivy's Compose/Ansible coverage is limited; scanning rendered output catches what templates produce. Evaluate KICS in S1; drop it if conftest + Trivy cover enough |
 | Workflow security | **actionlint**, **zizmor** | pre-commit, CI (`build.yml`) | Catches broken expressions, script injection, over-broad permissions, unpinned actions |
-| CI reports | `scripts/ci/report.py` (Markdown + self-contained HTML) | Every workflow's `report` job | Uploaded as Actions artifacts and shown in the job summary (§7.5) |
+| CI reports | `scripts/ci/report.py` (Markdown + self-contained HTML), Allure, Trivy HTML and CycloneDX explorer | PR artifacts and static `gh-pages` reports | Private per-run artifacts for PRs; only `main/` and `tags/<tag>/` publish to GitHub Pages (§7.5) |
 | Vulnerabilities | **Trivy image** + **Trivy fs** | `make scan`, CI on PR + nightly | Fail on CRITICAL/HIGH with fix available; `.trivyignore` with expiry comments |
 | Misconfiguration (IaC) | **Trivy config** | `make scan`, CI (`build.yml` blocking on Dockerfiles; `iac-security.yml` advisory on rendered config) | Dockerfiles, Compose, and Ansible coverage where supported |
 | SBOM + licences | **Trivy** `image --format cyclonedx` (SBOM) and `--scanners license` | CI on image build | SBOM attached to GHCR image; licence findings reviewed, not auto-failed |
@@ -863,7 +863,7 @@ nigu-lite/
 ├── .github/
 │   ├── instructions/                 # task-scoped AI instructions (20–30 lines each)
 │   ├── pull_request_template.md
-│   └── workflows/                    # build.yml, iac-security.yml, publish.yml, integration.yml, retention.yml (§7.5)
+│   └── workflows/                    # build, IaC, publish, reports, integration and retention (§7.5)
 ├── docs/
 │   ├── adr/  sdd/  lld/  developer/
 │   ├── diagram-style.md              # single source of mermaid classDef/style lines (§11.6)
@@ -1104,6 +1104,7 @@ All three main workflows share one pattern: **catalog → plan → matrix of wor
 | **Publish** | `publish.yml` | Push to `main` after a green Build (`workflow_run`); tag `v*`; manual | Yes | Build, scan, sign and push changed images and tenant packages; resolve per-VPS locks; GitHub Release on tags |
 | Integration | `integration.yml` | Push to `main`; manual | Yes (deploy gate) | §9 |
 | Retention | `retention.yml` | Weekly; manual | — | Prune old `sha-` package versions and expired artifacts |
+| DevSecOps reports | `reports.yml` | Push to `main`; `v*`/release tags; manual | Yes | One-scan Trivy SARIF/HTML/CycloneDX conversion, Allure history and `gh-pages` publication under `main/` or `tags/<tag>/` |
 
 ```mermaid
 flowchart LR
@@ -1192,6 +1193,14 @@ flowchart LR
 
 - Concurrency: one Publish at a time (`cancel-in-progress: false`) so tags and locks are never half-written.
 - Permissions per job: only `publish-*` get `packages: write`; `release` gets `contents: write`; everything else read-only.
+
+#### DevSecOps reports (`reports.yml`)
+
+Feature branches and PRs keep reports in private Actions artifacts. Publishing is restricted to
+`main` and version tags. A single Trivy JSON scan is converted into SARIF, Trivy HTML and CycloneDX;
+the raw CycloneDX file feeds a self-contained package/licence explorer. Pytest writes Allure results,
+and the prior Pages bundle supplies Allure history. `peaceiris/actions-gh-pages` publishes with
+`keep_files: true` to `main/` or `tags/<tag>/`, so one reference cannot overwrite another.
 
 #### Reports (all workflows)
 
@@ -1937,7 +1946,7 @@ flowchart LR
 | Stage | Work items | Exit criteria |
 |---|---|---|
 | **S0 — Repo foundation** (single initial commit) | Create public repo (`main`, AGPL-3.0 `LICENSE`, `SECURITY.md`); `AGENTS.md` + `.github/instructions/*`; `.editorconfig`, `.gitattributes`, `.gitignore`, `.tool-versions`, `.pre-commit-config.yaml`; Makefile skeleton; `docs/templates/*` (README, ADR, SDD, LLD, tenant, VPS manifest); PR template with mermaid section; `commit-msg` hook + branch rules; `make setup` / `make doctor` with `scripts/setup/steps/*` (zero manual developer setup); `versions.yml`; baseline ADR `0001-platform-baseline.md` (D1–D27) and LLD template; root/product READMEs; repo settings (squash only, secret scanning + push protection, Dependabot alerts, private vulnerability reporting) | `make setup lint` passes on a clean clone; templates render; AGENTS index matches files |
-| **S1 — CI, scanning, manifests, unit tests** | `scripts/ci/` catalog, plan and report (+ unit tests); `build.yml`, `iac-security.yml`, `publish.yml`, `retention.yml` (§7.5); pre-commit incl. actionlint/zizmor; Trivy fs/config/secret + SARIF upload; KICS + conftest evaluation; PR title/branch checks; publish with ORAS + keyless cosign, proven with the `local-vps` image and a test tenant package; Renovate (`patch/` branches); manifest schema + validator; Jinja2 render tests; test tenant skeletons in `tests/tenants/`; enable the `main` ruleset (§7.4) | CI green; invalid manifests fail before remote tasks; deploy without `VPS=` fails; each workflow uploads `report.md` + `report.html`; a docs-only PR builds no modules; a direct push to `main` is rejected |
+| **S1 — CI, scanning, manifests, unit tests** | `scripts/ci/` catalog, plan and report (+ unit tests); `build.yml`, `iac-security.yml`, `publish.yml`, `reports.yml`, `retention.yml` (§7.5); pre-commit incl. actionlint/zizmor; Trivy fs/config/secret + SARIF upload; Reviewdog and Dependency Review PR checks; Ruff lint SARIF; KICS + conftest evaluation; PR title/branch checks; publish with ORAS + keyless cosign, proven with the `local-vps` image and a test tenant package; Allure, Trivy HTML and CycloneDX Pages reports for `main` and tags; Renovate (`patch/` branches); manifest schema + validator; Jinja2 render tests; test tenant skeletons in `tests/tenants/`; enable the `main` ruleset (§7.4) | CI green; invalid manifests fail before remote tasks; deploy without `VPS=` fails; each workflow uploads `report.md` + `report.html`; Reviewdog/Dependency Review annotate PRs; Allure + security + SBOM Pages exist after the first `main`/tag publish; a docs-only PR builds no modules; a direct push to `main` is rejected |
 | **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); Docker Engine `make setup` step; `deployments/local.yml`; `tls.mode` (self-signed); MinIO; `make local-up/down/reset/deploy` | Fresh clone → `make local-up local-deploy` gives a running edge with a test route |
 | **S3 — Core platform** | Host baseline roles (`host_kernel` tagged), Traefik (file provider, `selfsigned`, ACME DNS-01 resolver), MariaDB 11.8 LTS after ERPNext/Gibbon compatibility proof, LLDAP (groups `admin`/`ops`/`support`), Authelia (access rules + OIDC policies), wg-portal (OIDC), Beszel, Dozzle, DBX with the protection chain + LDAP Studio, backups (restic → S3), `db-shell`, `s3-ls`; Cloudflare role (render + check mode only) | Integration tests: health, per-tenant DB provisioning, native vector type/index smoke test, backup → restore, **access matrix §13.1**, Traefik sees `10.10.0.x` client IPs in the local env |
 | **S4 — Edu: Gibbon spike then pilot** | Spike: FrankenPHP image + pinned Gibbon + `tenant-guard.php`; isolation tests (cross-tenant file/DB/session access must fail); verify Gibbon root-path compatibility; benchmark vs per-school containers. Pilot: per-school Traefik host routers + Caddy blocks from manifest; tenant assets + SQL migrations from signed packages; per-school `/_health` + Traefik health checks; side-by-side versions + `make upgrade-test`; one shared `ai-embed` Model2Vec service; CI-generated knowledge indexes; Gibbon AI chat with tenant-admin Gemini/OpenAI key | Isolation suite passes, or fallback (D7) is decided by ADR; benchmark results committed; two test schools pass integration and host-routing tests (§9); an unhealthy test school does not affect the other; school A cannot retrieve school B knowledge; two synthetic schools answer four cited chunks through a mocked provider; `ai-embed` stays within its RAM target; upgrade + rollback drill passes; `edu-*` and `ai-retrieval-*` benchmarks recorded against §9.1 |

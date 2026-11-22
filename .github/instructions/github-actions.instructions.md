@@ -18,6 +18,8 @@ applyTo: '.github/workflows/**,scripts/ci/**'
 - Keep SARIF upload for persistent code scanning; Reviewdog consumes the same SARIF for PR review comments.
 - Reviewdog publishes both `github-pr-check` and `github-pr-review`; the check remains visible when SARIF has no findings.
 - Reviewdog is non-blocking (`fail-level=none`); Trivy's original exit code remains the blocking security gate.
+- Dependency Review posts CVE and licence changes on same-repository PRs.
+- Static DevSecOps reports deploy only for `main` and tags to `gh-pages` subfolders; feature branches never publish Pages.
 - Upload `<workflow>-report-<run_number>` (14 days); `part-*` fragments keep 1 day.
 - Blocking: `build.yml`, `publish.yml`, `integration.yml`; advisory: `iac-security.yml` (findings never fail it).
 - Use `pull_request`; never `pull_request_target` with a checkout of PR code.

@@ -144,6 +144,8 @@ variables, not direct expression interpolation.
 | L4 | Local registry uses non-production test tags | No local publish; direct load into runtime | Proves the registry path without runtime coupling | S1 |
 | L5 | Worktree and staged outputs cannot publish production artifacts | Treat all local builds equally | Preserves trusted GitHub OIDC boundary | S1 |
 | L6 | Reviewdog consumes the existing Trivy SARIF for a PR check and review comments | Duplicate a Trivy scan in another action | Visible clean status plus changed-file reviews without changing the blocking gate | S1 |
+| L7 | Publish static security, SBOM and Allure reports only for `main` and tags | Publish reports for every feature branch | Keeps Pages bounded while preserving per-release references | S1 |
+| L8 | Convert one Trivy JSON report into SARIF, HTML and CycloneDX; render a local SBOM explorer | Run separate scans for each format | Avoids duplicate scanning and keeps package inventory available at zero vulnerabilities | S1 |
 
 ## 7. Security, isolation and privacy
 

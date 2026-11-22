@@ -21,6 +21,24 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.8.2
+        with:
+          comment-summary-in-pr: always
+          fail-on-severity: high
   catalog:
     name: Catalog and validate
     runs-on: ubuntu-24.04
@@ -172,7 +190,10 @@ jobs:
           hashFiles('report/parts/trivy.sarif') != ''
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
-        run: make ci-reviewdog SARIF=report/parts/trivy.sarif
+        run: >-
+          make ci-reviewdog
+          SARIF=report/parts/trivy.sarif
+          LINT_SARIF=report/parts/ruff.sarif
       - name: Generate final report
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

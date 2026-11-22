@@ -16,9 +16,11 @@ endif
 OUT_DIR ?= report
 MODE ?= worktree
 NIGU_REGISTRY_PORT ?= 5000
+HOST_PYTHON ?= python3
 
 .PHONY: help setup doctor lint test-unit scan check-docs fix-docs \
 	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-report \
+	ci-security-reports ci-allure ci-pages-index ci-report-dir ci-pages-configure \
 	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build
 
 help: ## List targets
@@ -73,11 +75,15 @@ ci-test-unit: ## Internal Build Container unit-test target
 		$(PYTHON) -m unittest discover --start-directory tests/unit --top-level-directory . --verbose
 
 ci-scan: ## Internal Build Container Trivy target
+	@status=0; \
 	trivy fs --scanners secret,misconfig,vuln --skip-db-update --skip-check-update \
-		--format sarif --output $(OUT_DIR)/trivy.sarif --skip-dirs .git .
-	$(PYTHON) scripts/ci/job.py --job scan --output $(OUT_DIR)/parts/scan.json -- \
-		trivy fs --scanners secret,misconfig,vuln --skip-db-update --skip-check-update \
-		--exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git .
+		--ignore-unfixed --exit-code 1 --severity HIGH,CRITICAL \
+		--format json --output $(OUT_DIR)/trivy-report.json --skip-dirs .git . || status=$$?; \
+	trivy convert --format sarif --output $(OUT_DIR)/trivy.sarif $(OUT_DIR)/trivy-report.json; \
+	ruff check --exit-zero --output-format=sarif --output-file $(OUT_DIR)/ruff.sarif .; \
+	$(PYTHON) scripts/ci/job.py --job scan --output $(OUT_DIR)/parts/scan.json \
+		--record-exit-code $$status --summary "Trivy filesystem, configuration and secret scan"; \
+	exit $$status
 
 ci-catalog: ## Validate and inventory CI modules
 	$(PYTHON) scripts/ci/catalog.py --root . --output $(OUT_DIR)/catalog.json
@@ -121,11 +127,47 @@ ci-release: ## Create a tag release from trusted publish evidence
 ci-plan-output: ## Export a plan to GitHub Actions output
 	$(PYTHON) scripts/ci/github_output.py --plan $(OUT_DIR)/plan.json --output "$(GITHUB_OUTPUT)"
 
-ci-reviewdog: ## Publish Trivy SARIF findings as pull request review comments
+ci-reviewdog: ## Publish Trivy and Ruff SARIF as PR checks and comments
 	reviewdog -f=sarif -name=Trivy -reporter=github-pr-review \
-		-filter-mode=file -level=warning -fail-level=none < "$(SARIF)"
+		-filter-mode=added -level=warning -fail-level=none < "$(SARIF)"
 	reviewdog -f=sarif -name=Trivy -reporter=github-pr-check \
-		-filter-mode=file -level=warning -fail-level=none < "$(SARIF)"
+		-filter-mode=added -level=warning -fail-level=none < "$(SARIF)"
+	reviewdog -f=sarif -name=Ruff -reporter=github-pr-review \
+		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
+	reviewdog -f=sarif -name=Ruff -reporter=github-pr-check \
+		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
+
+ci-security-reports: ## Generate static security and SBOM reports
+	mkdir -p $(OUT_DIR)/public/security $(OUT_DIR)/public/sbom
+	trivy fs --scanners secret,misconfig,vuln --skip-db-update --skip-check-update \
+		--file-patterns "pip:requirements-ci.txt" --list-all-pkgs \
+		--format json --output $(OUT_DIR)/trivy-report.json --skip-dirs .git .
+	trivy convert --format sarif --output $(OUT_DIR)/public/security/trivy-results.sarif \
+		$(OUT_DIR)/trivy-report.json
+	cd /opt/trivy-templates && trivy convert --format template --template "@contrib/html.tpl" \
+		--output $(OUT_DIR)/public/security/index.html $(OUT_DIR)/trivy-report.json
+	trivy convert --format cyclonedx \
+		--output $(OUT_DIR)/public/sbom/sbom.cdx.json $(OUT_DIR)/trivy-report.json
+	$(PYTHON) scripts/ci/sbom_html.py --sbom $(OUT_DIR)/public/sbom/sbom.cdx.json \
+		--output $(OUT_DIR)/public/sbom/index.html
+
+ci-allure: ## Run tests with Allure results and generate historical trends
+	$(PYTHON) scripts/ci/allure.py --root . --output $(OUT_DIR)/public/allure \
+		--history $(OUT_DIR)/allure-history --results $(OUT_DIR)/allure-results
+
+ci-pages-index: ## Generate the static DevSecOps report landing page
+	$(PYTHON) scripts/ci/pages.py landing --public $(OUT_DIR)/public
+
+ci-pages-history: ## Restore Allure history from the previous gh-pages bundle
+	$(HOST_PYTHON) scripts/ci/pages.py history --source "$(SOURCE)" --destination "$(OUT_DIR)/allure-history"
+
+ci-report-dir: ## Export the Pages destination for the current ref
+	$(HOST_PYTHON) scripts/ci/pages.py destination --git-ref "$(GIT_REF)" --ref-name "$(REF_NAME)" \
+		$(if $(GITHUB_OUTPUT),--github-output "$(GITHUB_OUTPUT)",)
+
+ci-pages-configure: ## Ensure GitHub Pages publishes the gh-pages branch
+	$(HOST_PYTHON) scripts/ci/configure_pages.py --repository "$(REPOSITORY)"
+
 
 ci-report: ## Merge job fragments into Markdown, HTML and JSON
 	$(PYTHON) scripts/ci/report.py --workflow "$(WORKFLOW)" --parts $(OUT_DIR)/parts \
@@ -179,6 +221,15 @@ container-report-output: ## Export a generated plan as workflow outputs
 
 container-retention: ## Generate retention reports in an ephemeral Build Container
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-retention "APPLY=$(APPLY)"
+
+container-security-reports: ## Generate security and SBOM reports in a Build Container
+	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-security-reports
+
+container-allure: ## Generate Allure reports in a Build Container
+	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-allure
+
+container-pages-index: ## Generate the static report landing page
+	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-pages-index
 
 container-release: ## Create a tag release inside a trusted Build Container
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-release
