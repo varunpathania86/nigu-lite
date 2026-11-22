@@ -135,6 +135,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: write
       security-events: write
     steps:
       - name: Checkout source
@@ -153,6 +154,24 @@ jobs:
         with:
           sarif_file: report/parts/trivy.sarif
           category: trivy
+      - name: Install Reviewdog
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        uses: reviewdog/action-setup@d8edfce3dd5e1ec6978745e801f9c50b5ef80252 # v1.4.0
+        with:
+          reviewdog_version: v0.21.3
+      - name: Add Trivy findings to pull request
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        run: make ci-reviewdog SARIF=report/parts/trivy.sarif
       - name: Generate final report
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

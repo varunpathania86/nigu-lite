@@ -41,6 +41,8 @@ The image runs as a non-root user and preloads Trivy and pre-commit caches.
 The Workspace creates an immutable source snapshot. The container receives `/source` read-only, copies
 it to disposable `/workspace`, and writes only to `/output`. Build Containers are destroyed after use.
 Do not add application services, Kubernetes, deployment CLIs or runtime state to this image.
+Reviewdog runs in the GitHub report job after this container returns the Trivy SARIF; it posts review
+comments but does not replace the container's blocking Trivy result.
 
 ## Tests
 

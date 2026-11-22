@@ -18,7 +18,7 @@ MODE ?= worktree
 NIGU_REGISTRY_PORT ?= 5000
 
 .PHONY: help setup doctor lint test-unit scan check-docs fix-docs \
-	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-report \
+	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-report \
 	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build
 
 help: ## List targets
@@ -120,6 +120,10 @@ ci-release: ## Create a tag release from trusted publish evidence
 
 ci-plan-output: ## Export a plan to GitHub Actions output
 	$(PYTHON) scripts/ci/github_output.py --plan $(OUT_DIR)/plan.json --output "$(GITHUB_OUTPUT)"
+
+ci-reviewdog: ## Publish Trivy SARIF findings as pull request review comments
+	reviewdog -f=sarif -name=Trivy -reporter=github-pr-review \
+		-filter-mode=file -level=warning -fail-level=none < "$(SARIF)"
 
 ci-report: ## Merge job fragments into Markdown, HTML and JSON
 	$(PYTHON) scripts/ci/report.py --workflow "$(WORKFLOW)" --parts $(OUT_DIR)/parts \
