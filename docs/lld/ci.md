@@ -143,7 +143,7 @@ variables, not direct expression interpolation.
 | L3 | Merge base with `origin/main` for PR planning | Head remote or previous commit | Matches PR contents | S1 |
 | L4 | Local registry uses non-production test tags | No local publish; direct load into runtime | Proves the registry path without runtime coupling | S1 |
 | L5 | Worktree and staged outputs cannot publish production artifacts | Treat all local builds equally | Preserves trusted GitHub OIDC boundary | S1 |
-| L6 | Reviewdog consumes the existing Trivy SARIF for PR comments | Duplicate a Trivy scan in another action | More intuitive changed-file reviews without changing the blocking gate | S1 |
+| L6 | Reviewdog consumes the existing Trivy SARIF for a PR check and review comments | Duplicate a Trivy scan in another action | Visible clean status plus changed-file reviews without changing the blocking gate | S1 |
 
 ## 7. Security, isolation and privacy
 

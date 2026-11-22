@@ -124,6 +124,8 @@ ci-plan-output: ## Export a plan to GitHub Actions output
 ci-reviewdog: ## Publish Trivy SARIF findings as pull request review comments
 	reviewdog -f=sarif -name=Trivy -reporter=github-pr-review \
 		-filter-mode=file -level=warning -fail-level=none < "$(SARIF)"
+	reviewdog -f=sarif -name=Trivy -reporter=github-pr-check \
+		-filter-mode=file -level=warning -fail-level=none < "$(SARIF)"
 
 ci-report: ## Merge job fragments into Markdown, HTML and JSON
 	$(PYTHON) scripts/ci/report.py --workflow "$(WORKFLOW)" --parts $(OUT_DIR)/parts \

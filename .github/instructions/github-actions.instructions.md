@@ -16,6 +16,7 @@ applyTo: '.github/workflows/**,scripts/ci/**'
 - An empty matrix skips the job; the report explains why.
 - Each job writes `report/<job>[-<leg>].json` and `.md`; the `report` job runs `if: always()` and builds `report.md` + `report.html`.
 - Keep SARIF upload for persistent code scanning; Reviewdog consumes the same SARIF for PR review comments.
+- Reviewdog publishes both `github-pr-check` and `github-pr-review`; the check remains visible when SARIF has no findings.
 - Reviewdog is non-blocking (`fail-level=none`); Trivy's original exit code remains the blocking security gate.
 - Upload `<workflow>-report-<run_number>` (14 days); `part-*` fragments keep 1 day.
 - Blocking: `build.yml`, `publish.yml`, `integration.yml`; advisory: `iac-security.yml` (findings never fail it).
