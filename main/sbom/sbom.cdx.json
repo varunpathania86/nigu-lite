@@ -1,0 +1,240 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:697903c7-c362-4cf7-9fa4-1cbc87d4d6b0",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-22T23:04:32+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.76.2"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "26e6b2e5-8939-449e-8b77-9dba5bcfa873",
+      "type": "application",
+      "name": ".",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "73add23a-4e3f-4523-8d67-f148a91b73cb",
+      "type": "application",
+      "name": "requirements-ci.txt",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/allure-pytest@2.16.2",
+      "type": "library",
+      "name": "allure-pytest",
+      "version": "2.16.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/allure-pytest@2.16.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/jsonschema@4.25.1",
+      "type": "library",
+      "name": "jsonschema",
+      "version": "4.25.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/jsonschema@4.25.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pre-commit@4.7.0",
+      "type": "library",
+      "name": "pre-commit",
+      "version": "4.7.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/pre-commit@4.7.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pytest@9.2.0",
+      "type": "library",
+      "name": "pytest",
+      "version": "9.2.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/pytest@9.2.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyyaml@6.0.3",
+      "type": "library",
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/pyyaml@6.0.3",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/ruff@0.17.6",
+      "type": "library",
+      "name": "ruff",
+      "version": "0.17.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/ruff@0.17.6",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/zizmor@1.32.0",
+      "type": "library",
+      "name": "zizmor",
+      "version": "1.32.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/zizmor@1.32.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "26e6b2e5-8939-449e-8b77-9dba5bcfa873",
+      "dependsOn": [
+        "73add23a-4e3f-4523-8d67-f148a91b73cb"
+      ]
+    },
+    {
+      "ref": "73add23a-4e3f-4523-8d67-f148a91b73cb",
+      "dependsOn": [
+        "pkg:pypi/allure-pytest@2.16.2",
+        "pkg:pypi/jsonschema@4.25.1",
+        "pkg:pypi/pre-commit@4.7.0",
+        "pkg:pypi/pytest@9.2.0",
+        "pkg:pypi/pyyaml@6.0.3",
+        "pkg:pypi/ruff@0.17.6",
+        "pkg:pypi/zizmor@1.32.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/allure-pytest@2.16.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/jsonschema@4.25.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pre-commit@4.7.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pytest@9.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyyaml@6.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/ruff@0.17.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/zizmor@1.32.0",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": []
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CycloneDX package and licence inventory</title>
+<style>
+    body { font: 16px/1.45 sans-serif; margin: 2rem; color: #1a1a1a; }
+    input { width: min(36rem, 100%); padding: .65rem; margin: 0 0 1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #cfd8dc; padding: .55rem; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #eceff1; }
+    code { overflow-wrap: anywhere; }
+    .meta { color: #455a64; }
+</style>
+</head>
+<body>
+<h1>CycloneDX package and licence inventory</h1>
+<p class="meta">8 components. Raw data:
+<a href="sbom.cdx.json" download>sbom.cdx.json</a>.</p>
+<label for="filter">Filter package, version or licence:</label>
+<input id="filter" type="search" autocomplete="off">
+<table id="inventory">
+<thead><tr><th>Type</th><th>Group</th><th>Name</th><th>Version</th><th>Licences</th><th>PURL</th></tr></thead>
+<tbody><tr><td>library</td><td></td><td>PyYAML</td><td><code>6.0.3</code></td><td>MIT</td><td><code>pkg:pypi/pyyaml@6.0.3</code></td></tr>
+<tr><td>library</td><td></td><td>allure-pytest</td><td><code>2.16.2</code></td><td>Apache-2.0</td><td><code>pkg:pypi/allure-pytest@2.16.2</code></td></tr>
+<tr><td>library</td><td></td><td>jsonschema</td><td><code>4.25.1</code></td><td>MIT</td><td><code>pkg:pypi/jsonschema@4.25.1</code></td></tr>
+<tr><td>library</td><td></td><td>pre-commit</td><td><code>4.7.0</code></td><td>MIT</td><td><code>pkg:pypi/pre-commit@4.7.0</code></td></tr>
+<tr><td>library</td><td></td><td>pytest</td><td><code>9.2.0</code></td><td>MIT</td><td><code>pkg:pypi/pytest@9.2.0</code></td></tr>
+<tr><td>application</td><td></td><td>requirements-ci.txt</td><td><code></code></td><td>UNKNOWN</td><td><code></code></td></tr>
+<tr><td>library</td><td></td><td>ruff</td><td><code>0.17.6</code></td><td>MIT</td><td><code>pkg:pypi/ruff@0.17.6</code></td></tr>
+<tr><td>library</td><td></td><td>zizmor</td><td><code>1.32.0</code></td><td>MIT</td><td><code>pkg:pypi/zizmor@1.32.0</code></td></tr></tbody>
+</table>
+<script>
+const filter = document.getElementById("filter");
+const rows = [...document.querySelectorAll("#inventory tbody tr")];
+filter.addEventListener("input", () => {
+    const query = filter.value.toLowerCase();
+    rows.forEach((row) => row.hidden = !row.textContent.toLowerCase().includes(query));
+});
+</script>
+</body>
+</html>
