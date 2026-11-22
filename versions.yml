@@ -5,6 +5,24 @@ schema_version: 1
 
 # --- Edge, data, identity, operations (core, S3) ---
 images: {}
+ci:
+  act_runner:
+    image: catthehacker/ubuntu
+    version: act-24.04
+    digest: sha256:f68a2abac9c927421fd5a38e23d3610c7804916ffdb2491d7e669fe0ebbe1979
+  build_image:
+    version: "1"
+    base: ubuntu
+    base_version: "24.04"
+    base_digest: sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
+  local_registry:
+    image: registry
+    version: "2"
+    digest: sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+  kics:
+    image: checkmarx/kics
+    version: v2.2.1
+    digest: sha256:49ccc54b6ae7f5d5fc95e96f8f95c18c57f3bba047ab611a03d80792bdff6757
 
 # --- Gibbon releases available to schools (edu, S4) ---
 # Each school's gibbon_version in deployments/<vps>.yml must exist here.

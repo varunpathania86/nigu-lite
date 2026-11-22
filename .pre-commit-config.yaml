@@ -39,6 +39,11 @@ repos:
       - id: ruff-check
       - id: ruff-format
 
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1-1
     hooks:
@@ -49,25 +54,32 @@ repos:
     hooks:
       - id: check-docs
         name: AGENTS index, instruction sizes, templates, mermaid blocks
-        entry: mise exec -- python scripts/check_docs.py
-        language: system
+        entry: python scripts/check_docs.py
+        language: python
         pass_filenames: false
         files: \.md$|^scripts/check_docs\.py$
+      - id: zizmor
+        name: GitHub Actions workflow security
+        entry: zizmor .github/workflows
+        language: python
+        additional_dependencies: [zizmor==1.32.0]
+        pass_filenames: false
+        files: ^\.github/workflows/
       - id: branch-name
         name: Branch name follows git.instructions.md
-        entry: mise exec -- python scripts/hooks/branch_name.py
-        language: system
+        entry: python scripts/hooks/branch_name.py
+        language: python
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
       - id: commit-msg
         name: Plain-sentence commit message, no AI co-author trailers
-        entry: mise exec -- python scripts/hooks/commit_msg.py
-        language: system
+        entry: python scripts/hooks/commit_msg.py
+        language: python
         stages: [commit-msg]
       - id: trivy-secret
         name: Trivy secret scan
-        entry: mise exec -- trivy fs --scanners secret --exit-code 1 --quiet --skip-dirs .git .
+        entry: trivy fs --scanners secret --exit-code 1 --quiet --skip-dirs .git .
         language: system
         pass_filenames: false
         always_run: true

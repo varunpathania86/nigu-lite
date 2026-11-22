@@ -6,6 +6,7 @@ applyTo: '.github/workflows/**,scripts/ci/**'
 
 - Design and job tables: master-plan.md §7.5; publish specifics: `release-publish.instructions.md`.
 - Every workflow follows catalog → plan → matrix of work → report.
+- GitHub and Act run source through the same disposable Build Container contract (`ci-build.instructions.md`).
 - Catalog and plan come from `scripts/ci/catalog.py` and `scripts/ci/plan.py`, same as `make ci-catalog` / `make ci-plan BASE=`.
 - Jobs call `make` targets only (`ci-module`, `ci-quality`, `ci-report`); no inline tool commands.
 - Pass expressions to `run:` only through `env:` (script injection, zizmor).

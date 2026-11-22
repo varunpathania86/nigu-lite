@@ -43,6 +43,7 @@ All files are in `.github/instructions/`.
 | Upgrading Gibbon, ERPNext or images | `upgrade.instructions.md` |
 | Changing publish workflows, images or tenant packages | `release-publish.instructions.md` |
 | Editing `.github/workflows/*` or `scripts/ci/*` | `github-actions.instructions.md` |
+| Building or running CI, Act and Build Containers | `ci-build.instructions.md` |
 | Handling secrets, ports, personal data or ads | `security.instructions.md` |
 | Working on the local VPS simulator | `local-env.instructions.md` |
 | Adding a tool, runtime or system package developers need | `dev-setup.instructions.md` |

@@ -1,0 +1,66 @@
+name: Retention
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NIGU_LOCAL_MODE: commit
+
+jobs:
+  plan:
+    name: Retention plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Plan retention
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: make container-retention MODE="$NIGU_LOCAL_MODE" BASE=HEAD APPLY=0
+      - name: Apply retention
+        if: github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: make container-retention MODE="$NIGU_LOCAL_MODE" BASE=HEAD APPLY=1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: retention-report-${{ github.run_number }}
+          path: report
+          retention-days: 14
+  report:
+    name: Report
+    needs: plan
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: retention-report-${{ github.run_number }}
+          path: report/parts
+      - env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: make container-report MODE="$NIGU_LOCAL_MODE" BASE=HEAD WORKFLOW=retention
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: retention-final-report-${{ github.run_number }}
+          path: |
+            report/act/report.md
+            report/act/report.html
+            report/act/report.json
+          retention-days: 14

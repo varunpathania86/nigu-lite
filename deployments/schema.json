@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nigu.in/schemas/deployments/vps-1.json",
+  "title": "VPS deployment manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host",
+    "environment",
+    "public_ip",
+    "node_record",
+    "control_plane",
+    "dns",
+    "tls",
+    "wireguard",
+    "upgrade_day",
+    "core_services",
+    "products"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "host": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "environment": {"enum": ["production", "staging", "local"]},
+    "public_ip": {"type": "string", "format": "ipv4"},
+    "node_record": {"type": "string", "format": "hostname"},
+    "control_plane": {"type": "boolean"},
+    "dns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {"provider": {"enum": ["cloudflare", "none"]}}
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {"mode": {"enum": ["selfsigned", "letsencrypt-staging", "letsencrypt"]}}
+    },
+    "wireguard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subnet", "address", "port"],
+      "properties": {
+        "subnet": {"type": "string"},
+        "address": {"type": "string", "format": "ipv4"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "upgrade_day": {"const": "saturday"},
+    "core_services": {
+      "type": "array",
+      "items": {"enum": ["edge", "data", "identity", "backups", "metrics"]},
+      "uniqueItems": true
+    },
+    "products": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["erp", "edu"],
+      "properties": {
+        "erp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tenants"],
+          "properties": {
+            "tenants": {
+              "type": "array",
+              "maxItems": 10,
+              "uniqueItems": true,
+              "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"}
+            }
+          }
+        },
+        "edu": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tenants"],
+          "properties": {
+            "tenants": {
+              "type": "object",
+              "maxProperties": 10,
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["apps", "gibbon_version", "canary"],
+                "properties": {
+                  "apps": {
+                    "type": "array",
+                    "items": {"const": "gibbon"},
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "gibbon_version": {"type": "string", "minLength": 1},
+                  "canary": {"type": "boolean"}
+                }
+              },
+              "propertyNames": {"pattern": "^[a-z0-9][a-z0-9-]*$"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

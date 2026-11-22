@@ -1,7 +1,7 @@
 # nigu-lite
 
 > Free, ad-supported ERPNext (India GST) and GibbonEdu hosting for many tenants on low-end VPSs.
-> Owner: varunpathania86 · Status: experimental (Stage 0 — repository foundation)
+> Owner: varunpathania86 · Status: experimental (Stage 1 — CI and scanning)
 
 ## Overview
 
@@ -38,8 +38,9 @@ Prerequisites: `git` and `make`; `make setup` installs everything else.
 ```bash
 make setup      # install all developer tools and git hooks (idempotent)
 make doctor     # check the machine without changing it
-make lint       # pre-commit on all files
-make test-unit  # unit tests
+make lint       # pre-commit in an ephemeral Build Container
+make test-unit  # unit tests in an ephemeral Build Container
+make act-build  # execute the Build workflow through Act
 make help       # all targets
 ```
 
@@ -52,9 +53,13 @@ make help       # all targets
 | [`core/`](core/), [`erp/`](erp/), [`edu/`](edu/) | Shared platform services and the two products |
 | [`scripts/`](scripts/) | Scripts called by the Makefile and git hooks |
 | [`tests/`](tests/) | Unit tests now; integration tests and benchmarks from later stages |
+| [`deployments/`](deployments/) | Validated VPS manifests and future digest locks |
+| [`policy/`](policy/) | Advisory rendered-IaC rules and accepted findings |
 | [`versions.yml`](versions.yml), [`.tool-versions`](.tool-versions) | Image/artifact pins and CLI tool pins |
 
-Planned folders (`deployments/`, `local/`, `policy/`) are added by the stage that needs them (master-plan.md §12).
+The delivery flow is Workspace snapshot → ephemeral Build Container → registry → future deployment →
+future runtime. The Workspace Container does not build or run application services. The `local/`
+runtime simulator is added in Stage 2.
 
 ## Configuration
 
@@ -63,14 +68,18 @@ personal data.
 
 ## Operations
 
-Not deployable yet. Progress follows the stages in master-plan.md §12.
+Not deployable yet. `make deploy VPS=` validates that a target was explicitly selected, then reports that
+runtime deployment is not available before later stages. Progress follows master-plan.md §12.
 
 ## Tests
 
-`make test-unit` runs the unit tests in [`tests/unit/`](tests/unit/). See [tests/README.md](tests/README.md).
+`make test-unit` runs [`tests/unit/`](tests/unit/) inside a disposable Build Container.
+`make act-build` exercises the GitHub workflow locally without pushing source. See
+[tests/README.md](tests/README.md).
 
 ## Related
 
 - [Contributing and conventions](docs/developer/getting-started.md)
 - [Baseline ADR](docs/adr/0001-platform-baseline.md)
+- [CI LLD](docs/lld/ci.md) · [Manifest LLD](docs/lld/tenant-manifest.md)
 - [Security policy](SECURITY.md) · [Licence: AGPL-3.0](LICENSE)

@@ -86,7 +86,7 @@ These decisions (D1–D27) form one baseline record, `docs/adr/0001-platform-bas
 | D1 | **Docker Compose v2 per VPS** | Docker Swarm, k3s | VPSs are independent with fixed roles; a scheduler/cluster adds control plane, quorum and overlay-network complexity for no benefit. |
 | D2 | **Ansible** for provisioning and deployment | Terraform-only, shell scripts | Agentless, idempotent, Jinja2 templating fits the IaC rules. |
 | D3 | **Shared DB engines, one database + user per tenant** | DB container per app | Saves 1–2 GB RAM; isolation per DB credentials. |
-| D4 | **MariaDB for tenant apps; separate SQLite databases for LLDAP and Authelia** | MariaDB for identity too; PostgreSQL | ERPNext and Gibbon share MariaDB. Each identity service owns its SQLite file in a separate persistent volume, with no dependency on MariaDB availability and no extra database server. Measure resource use in S3; SQLite does not provide high availability. Adding PostgreSQL later (an app that needs it) is an ADR. |
+| D4 | **MariaDB for tenant apps; separate SQLite databases for LLDAP and Authelia** | MariaDB for identity too; PostgreSQL | ERPNext and Gibbon share MariaDB. Each identity service owns its SQLite file in a separate persistent volume, with no dependency on MariaDB availability and no extra database server. The S3 pin is planned as MariaDB 11.8 LTS after ERPNext/Gibbon compatibility testing; its native `VECTOR` type and vector index remove the need for a separate vector database. Measure resource use in S3; SQLite does not provide high availability. Adding PostgreSQL later (an app that needs it) is an ADR. |
 | D5 | **LLDAP + Authelia** for LDAP + OIDC, **platform staff only** (`admin`, `ops`, `support`) | OpenLDAP + Keycloak | < 100 MB combined vs ~1 GB; YAML-configured (templatable). Tenant users keep native app accounts (D26). |
 | D6 | **ERPNext multi-site, one bench** | Stack per company | Frappe's native multi-tenancy; per-tenant cost ≈ disk + DB. |
 | D7 | **One FrankenPHP container serving all Gibbon schools** (one Caddy site block per school) | Container per school; Nginx + PHP-FPM pools | Lowest memory; one PHP/web runtime to patch. Isolation via DB credential separation, Caddy path rules and PHP hardening (§5). Fallback to per-school containers if the S4 spike fails security or compatibility checks. |
@@ -123,6 +123,7 @@ flowchart TB
   subgraph VPS-1 [VPS-1 · Docker Compose]
     T --> ERP[ERPNext bench<br/>multi-site + India Compliance]
     T --> GIB[FrankenPHP<br/>all Gibbon schools]
+    ERP & GIB --> AIE["ai-embed<br/>shared Model2Vec"]
     T --> AUTH[Authelia OIDC]
     AUTH --> LDAP[LLDAP]
     ERP --> MDB[(MariaDB)]
@@ -132,12 +133,13 @@ flowchart TB
     WG[wg-portal] -->|OIDC| AUTH
     BK[db-backup + restic] --> MDB
   end
+  ERP & GIB -->|"HTTPS<br/>approved context"| AI["Gemini / OpenAI<br/>tenant-selected provider"]
   BK -->|encrypted| S3[(Off-site object store)]
   ADM[Platform staff] -->|WireGuard 51820/udp| WG
   class U,ADM user
   class CF,T,WG edge
   class ERP,GIB app
-  class AUTH,LDAP,BK core
+  class AUTH,LDAP,BK,AIE,AI core
   class MDB,ASQL,LSQL,S3 data
   style VPS-1 fill:transparent,stroke:#78909c,stroke-width:1.5px
   classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
@@ -153,9 +155,14 @@ flowchart TB
 | core/access | wg-portal (WireGuard `wg0`, `10.10.0.0/24`) |
 | core/identity | LLDAP, Authelia; one private SQLite volume each |
 | core/data | MariaDB (`erp_*`, `gibbon_*`) |
+| core/ai | One internal `ai-embed` Model2Vec service shared by all tenants; outbound generation uses the tenant's approved Gemini/OpenAI adapter and key |
 | core/ops | db-backup → restic → S3, Beszel (`beszel.nigu.in`), Dozzle (VPN only), DBX (always on, VPN only) |
 | erp | ERPNext bench: backend, frontend, websocket, queue-short, queue-long, scheduler, redis-cache, redis-queue |
 | edu | `gibbon-<version>` (FrankenPHP, all schools; a second version only during upgrades) |
+
+The external AI provider never connects directly to MariaDB or `ai-embed`. The tenant application
+builds the provider request from authenticated tenant context, the user query and the four approved
+retrieval chunks. The provider key remains in that tenant's Vault.
 
 ### 3.2 Later — independent VPSs
 
@@ -318,8 +325,9 @@ sequenceDiagram
 
 | Function | Tool | Approx. RAM | Rationale |
 |---|---|---|---|
-| MySQL-compatible DB | **MariaDB 10.11 LTS** (verify ERPNext + India Compliance support before pinning) | 1.2–2 GB | Required by Frappe; also Gibbon. LLDAP and Authelia use separate SQLite stores (D4). |
+| MySQL-compatible DB | **MariaDB 11.8 LTS** (pin only after ERPNext + India Compliance compatibility tests in S3) | 1.2–2 GB | Required by Frappe; also Gibbon. Native `VECTOR(512)`, cosine distance and vector indexes support tenant-scoped RAG without another database engine. The 11.8 LTS line is maintained until June 2028. LLDAP and Authelia use separate SQLite stores (D4). |
 | Cache/queue | **Redis 7 / Valkey** inside `erp/` | 100–250 MB | Tightly coupled to Frappe. |
+| Shared query embeddings | **Model2Vec `minishlab/potion-retrieval-32M`** in one internal `ai-embed` service per VPS | target ≤ 350 MB, benchmark in S4 | Static 512-dimensional English embeddings explicitly fine-tuned for retrieval; one loaded model serves every edu and ERP tenant. It remains orders of magnitude lighter and faster than a transformer runtime and avoids Ollama and an ONNX/PyTorch inference server. The model and dimensionality are pinned in `versions.yml`; changing them rebuilds affected knowledge packages. |
 | DB access (GUI) | **DBX Web workbench** at `dbx.nigu.in` — always running on the control-plane VPS; image pinned by digest; Web release and its internal connection API contract pinned to the same version; VPN allow-list + Authelia + trusted-auth header (below) | ≤ 300 MB budget, measure in S3 | Web workbench for MariaDB (local and other VPSs over WireGuard), the S3 object store (if verified) and LLDAP (LDAP Studio plugin). No Kafka/Trino agents or JRE (decided: not needed). `mem_limit` set. |
 | DB access (CLI) | `make db-shell VPS= DB=` → `mariadb` via SSH over WireGuard | 0 | Fastest, no extra service. |
 | Object store access | **rclone** (CLI, `make s3-ls`, `make s3-sync`) + provider web console | 0 | restic handles backups; rclone handles ad-hoc listing/copy. Use DBX for buckets only if its object-store support is verified in S3. |
@@ -590,6 +598,100 @@ MinIO's licensing and distribution changed in 2025 (community console reduced, o
 
 Pin all GitHub Actions (including Trivy's) by commit SHA. CI tooling is part of the supply chain.
 
+### 4.8 Tenant AI assistants
+
+An optional AI chat window is added first to Gibbon in S4 and uses the same tenant assistant contract
+for ERPNext in S5. Every application on a VPS shares **one** loaded embedding model and one internal
+embedding service. There is no per-school or per-company model process.
+
+| Item | Design |
+|---|---|
+| Embedding model | **Model2Vec `minishlab/potion-retrieval-32M`**, pinned by model revision/checksum in `versions.yml`; 32M-parameter static CPU model, 512-dimensional normalized vectors, retrieval-fine-tuned |
+| Runtime service | One `ai-embed` container per VPS, internal network only, health check, `mem_limit`; no public port, GPU, Ollama, ONNX server or PyTorch transformer server |
+| Sharing | All 10 schools and all 10 ERP tenants call the same service; tenant isolation is enforced by the application database and package being queried, not by loading separate models |
+| Document source | `knowledge/*.md` in the tenant folder, with front matter for title, source, effective date, expiry and audience labels |
+| Publish-time work | CI validates Markdown, chunks it deterministically, embeds every chunk with the pinned model, records model/checksum/chunk metadata and packages `knowledge/` with the tenant |
+| Runtime retrieval | Application sends the user's query to `ai-embed`, searches only that tenant's MariaDB database, combines vector candidates with MariaDB full-text candidates using reciprocal-rank fusion, then uses the four best source chunks as answer context |
+| Vector store | A tenant-owned table in each tenant database: `VECTOR(512)` plus a cosine vector index in MariaDB 11.8; no separate vector database, Redis vector index or hosted embedding API |
+| Generation provider | Tenant-selected Gemini or OpenAI adapter. The tenant's admin supplies an API key; it is stored in that tenant's `vault.yml`, never in Git or the OCI package |
+| Session context | Application adds a small allow-listed context object (tenant, app, authenticated role, locale, date and approved domain state); raw cookies, provider keys and unrelated database rows are never sent |
+| Answer safety | Provider receives the question, approved retrieval context and instructions. The response cites the selected source documents; missing/expired sources produce a "not available" answer instead of an invented policy |
+| Chunking and ranking | Publish creates 300–700 token Markdown chunks with headings and 10–20% overlap. Runtime retrieves about 20 lexical and 20 vector candidates, fuses their ranks, removes near-duplicates and returns top 4. Exact dates, fees, IDs and policy names therefore do not depend on vector similarity alone |
+| Outbound control | `ai-embed` has no public ingress; application egress to generation providers uses a pinned host allow-list, timeout, request-size limit, retry cap and per-tenant rate limit |
+
+```mermaid
+flowchart LR
+  U["Tenant user"] --> C["Gibbon or ERP chat window"]
+  C --> A["Tenant application"]
+  A --> E["Shared ai-embed<br/>query vector"]
+  A --> D[("Tenant MariaDB<br/>top 4 sources")]
+  E --> D
+  D --> P["Hybrid top-4 retrieval<br/>role + approved context"]
+  P --> L["Tenant AI provider<br/>Gemini or OpenAI"]
+  L --> C
+  B["Build Container<br/>knowledge Markdown"] --> G[("Signed tenant package<br/>precomputed vectors")]
+  G --> D
+  class U user
+  class C,A,P app
+  class E,L core
+  class D,G data
+  class B tool
+  classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef core fill:#e1bee7,stroke:#6a1b9a,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
+```
+
+S4 establishes the Gibbon chat and shared service. S5 attaches the same service to ERPNext through a
+small product adapter; it does not load a second model. A model or chunking change rebuilds every
+AI-enabled tenant package. Normal knowledge-only changes rebuild that tenant package only.
+
+Implementation starts only after `docs/lld/ai-assistant.md` is approved. Because tenant questions and
+retrieved text cross into a tenant-selected external AI provider, the LLD PR must propose an ADR for
+the changed trust/data-processing boundary; the owner decides whether it is accepted. The LLD fixes
+the exact model revision, provider adapter contract, prompt template, retention/logging policy,
+tenant-key lifecycle, benchmark dataset and failure behavior. The SDD and security/tenant instructions
+are updated in the same implementation PR.
+
+**Why this model:** `potion-retrieval-32M` is the strongest static retrieval model in the published
+Model2Vec results: MTEB retrieval 35.06 versus 32.67 for `potion-base-32M` and 31.11 for
+`potion-base-8M`. It reaches 81.69% of the `all-MiniLM-L6-v2` retrieval score while remaining a static
+CPU model with no transformer, ONNX or Ollama server. This is a worthwhile RAG reliability improvement:
+more relevant top-k source chunks reduce the chance that the generation model receives an incomplete
+answer context.
+
+The trade-off is 32M parameters and 512-dimensional rows instead of about 8M parameters and 256
+dimensions. The S4 spike benchmarks `potion-retrieval-32M` against `potion-base-8M` on representative
+school questions, including exact fee/date/policy queries and paraphrases. Select `32M` only if the
+service stays within 350 MB RSS, retrieval p95 stays below 250 ms and Recall@4 improves materially
+over the 8M fallback. Minimum acceptance is Recall@4 ≥ 0.85 and source attribution correctness ≥ 0.95
+on a synthetic set of at least 100 fee, holiday, timetable, policy, form and event questions per
+tenant. If it misses the resource or quality gate, use the 8M model as the documented fallback and
+regenerate every AI-enabled tenant package. A transformer, ONNX inference server or Ollama is
+intentionally outside scope.
+The version and dimension used by CI and runtime are the same; a dimension or model change is never
+mixed across packages on one VPS.
+
+**Privacy boundary:** the repository and OCI tenant packages are public. Therefore `knowledge/` must
+contain only tenant-approved material that is safe to publish. A school chat can retrieve public school
+information by role, but confidential records and student-specific documents must not be embedded into a
+package. Query and retrieved text sent to the selected AI provider are processing data and must be named
+in the tenant terms/privacy notice. The platform does not retain prompt text by default, does not train on
+it, and does not automatically send student/guardian PII. An admin-provided key is required; no platform
+key may answer a tenant request.
+
+**Retrieval isolation:** the application always selects the authenticated tenant's own database and
+then filters to allowed audience labels before returning the top four chunks. Integration tests verify
+school A cannot retrieve school B sources, ERP company A cannot retrieve company B sources, and a
+malformed prompt cannot override the tenant or role constraints. If private knowledge later requires
+stronger access control, it needs its own ADR, encryption design and storage rather than relying on the
+public tenant package.
+
+Reference material: [MariaDB 11.8 vector features](https://mariadb.com/docs/release-notes/community-server/11.8/what-is-mariadb-118.md),
+[`minishlab/potion-retrieval-32M`](https://huggingface.co/minishlab/potion-retrieval-32M) and
+[Model2Vec](https://github.com/MinishLab/model2vec).
+
 ---
 
 ## 5. Gibbon on a Single FrankenPHP Container
@@ -736,9 +838,10 @@ Runtime-only updates (PHP/FrankenPHP, no Gibbon change) use the same flow. ERPNe
 | Second Gibbon container (upgrade window only) | +200–400 MB, temporary |
 | Backup, Beszel, Dozzle | 150 MB |
 | DBX Web (control-plane VPS only, always on) | ≤ 300 MB (measure in S3) |
-| **Total** | **~5.1–6.0 GB** (+ upgrade window; rough, verify with the `capacity-10x10` benchmark) |
+| Shared `ai-embed` Model2Vec retrieval service (all tenants) | target ≤ 350 MB (measure in S4) |
+| **Total** | **~5.5–6.4 GB** (+ upgrade window; rough, verify with the `capacity-10x10` and AI retrieval benchmarks) |
 
-MariaDB holds 20 tenant databases (10 ERP and 10 Gibbon); LLDAP and Authelia each have a separate SQLite store. Size the buffer pool from benchmarks. Disk (300 GB): budget ~10 GB per ERP site and ~5 GB per school incl. uploads, plus local dump staging; alert at 70 %. The validator rejects more than 10 tenants per product per VPS. A `capacity-10x10` benchmark scenario must pass before a VPS is filled. Scale-out triggers: RAM > 75 % sustained, swap-in activity, p95 > 2 s, or tenant counts outgrowing benchmarks.
+MariaDB holds 20 tenant databases (10 ERP and 10 Gibbon); LLDAP and Authelia each have a separate SQLite store. Size the buffer pool from benchmarks. The 512-dimensional school and ERP chat indexes share the existing tenant databases, but add approximately 2 KiB per raw vector and additional index space. `ai-embed` is capped as one shared service, not one process per tenant. The target total including that service is roughly **5.5–6.4 GB**, still below the 8 GB ceiling but subject to the S4 benchmark. Disk (300 GB): budget ~10 GB per ERP site and ~5 GB per school incl. uploads and generated knowledge vectors, plus local dump staging; alert at 70 %. The validator rejects more than 10 tenants per product per VPS. A `capacity-10x10` benchmark including concurrent knowledge retrieval must pass before a VPS is filled. Scale-out triggers: RAM > 75 % sustained, swap-in activity, p95 > 2 s, or tenant counts outgrowing benchmarks.
 
 ---
 
@@ -753,7 +856,7 @@ nigu-lite/
 ├── SECURITY.md                       # private vulnerability reporting
 ├── Makefile                          # sole entry point
 ├── .tool-versions                    # CLI tool pins (mise/asdf)
-├── versions.yml                      # image/artifact pins: Gibbon, DBX, image digests
+├── versions.yml                      # image/artifact/model pins: Gibbon, DBX, embedding model, digests
 ├── .editorconfig  .gitattributes  .gitignore
 ├── .pre-commit-config.yaml
 ├── .trivyignore                      # each entry: reason + expiry date
@@ -776,11 +879,11 @@ nigu-lite/
 │   ├── vps-01.yml
 │   └── vps-01.lock.yml               # resolved image/package digests (generated, committed)
 ├── local/                            # local VPS simulator (Dockerfile: Ubuntu + systemd + sshd + Docker)
-├── core/        README.md  ansible/  scripts/
+├── core/        README.md  ansible/  images/ai-embed/  scripts/
 ├── erp/         README.md  ansible/  images/erpnext/  scripts/
-│   └── tenants/<company-id>/         # README.md, tenant.yml, vault.yml, assets/, migrations/
+│   └── tenants/<company-id>/         # README.md, tenant.yml, vault.yml, assets/, migrations/, knowledge/
 ├── edu/         README.md  ansible/  images/gibbon/  scripts/
-│   └── tenants/<school-id>/          # README.md, tenant.yml, vault.yml, assets/, migrations/
+│   └── tenants/<school-id>/          # README.md, tenant.yml, vault.yml, assets/, migrations/, knowledge/
 └── tests/
     ├── README.md
     ├── unit/                         # manifest validator, template rendering, scripts
@@ -807,7 +910,7 @@ dns: {provider: cloudflare}       # cloudflare | none (local)
 tls: {mode: letsencrypt}          # selfsigned | letsencrypt-staging | letsencrypt (DNS-01, wildcard per VPS)
 wireguard: {subnet: 10.10.0.0/24, address: 10.10.0.1, port: 51820}
 upgrade_day: saturday
-core_services: [edge, data, identity, backups, metrics]
+core_services: [edge, data, identity, backups, metrics, ai]
 products:
   erp:
     tenants: [company-a, company-b]
@@ -839,6 +942,9 @@ flowchart LR
 ```
 
 - The manifest **selects**; `tenants/<id>/tenant.yml` **defines** (domains, features and Gibbon branding).
+- AI-enabled tenants declare `ai.enabled`, provider and generation model explicitly in `tenant.yml`.
+  The shared embedding model is a platform pin in `versions.yml`, while provider keys remain in
+  `vault.yml`. A VPS with any AI-enabled tenant declares the `ai` core service explicitly.
 - Deploys require `VPS=`; there is no default "deploy everything".
 - Validation before any remote task: schema, unknown tenant IDs, duplicate placement across manifests, unsupported apps, missing tenant files, unencrypted secrets.
 - `deployments/local.yml` selects **test tenants** from `tests/tenants/`.
@@ -855,8 +961,26 @@ flowchart LR
 | `vault.yml` | Encrypted DB/OIDC credentials |
 | `assets/` | Static files only: logo, header, CSS overrides |
 | `migrations/` | Ordered, forward-only tenant data changes, including the initial bootstrap (`0001-bootstrap`) |
+| `knowledge/` | Tenant-approved, non-sensitive Markdown source for the optional AI chat plus CI-generated chunk and embedding indexes |
 
 Never commit real personal data, production exports or uploads. The repo and its packages are **public**: tenant IDs, domains, logos and bootstrap migrations are visible to everyone, so tenants must agree to that in their terms.
+
+Knowledge sources may contain public school information such as fee schedules, holidays, public timetables, policies, application forms and event notices, but never student, staff or parent records, private contact details, medical data, grades, admissions in progress or internal-only documents. `knowledge/` is public because tenant OCI packages are public. Access-restricted knowledge is not solved by a role check in the UI; it needs a separate private-store design and an ADR before it is added.
+
+Recommended tenant AI configuration:
+
+```yaml
+ai:
+  enabled: true
+  provider: gemini              # gemini | openai (explicit allow-list)
+  generation_model: "<pin>"
+  chat_roles: [staff, student, parent]
+  languages: [en]
+```
+
+The provider API key is separate, for example `vault_ai_provider_api_key`, edited only with
+`make vault-edit FILE=`. A tenant that does not use chat still states `enabled: false` and its provider
+as `none`; there is no implicit default. The embedding model is not tenant-selectable.
 
 #### Tenant migrations
 
@@ -912,6 +1036,8 @@ Rules: forward-only (no down scripts; rollback = restore the snapshot); a change
 | `upgrade VPS= PRODUCT=` | Saturday upgrade of one VPS + product (§5.5) |
 | `maintenance VPS= ID= STATE=on\|off` | Per-tenant maintenance page |
 | `tenant-package PRODUCT= ID=` | Build the tenant package locally (same as CI) |
+| `knowledge-build PRODUCT= ID=` | Validate, chunk and embed `knowledge/*.md` with the pinned shared embedding model |
+| `ai-check VPS= ID=` | Query a tenant through the internal embedding service and verify top-k sources without calling a paid AI provider |
 | `tenant-migrate VPS= ID= [CHECK=1]` | Snapshot, then apply pending tenant migrations (also part of `deploy`); `CHECK=1` lists pending ones only |
 | `cert-status VPS=` | Certificate SANs and expiry served by Traefik on that VPS |
 | `dns-sync VPS=` | Create/update the node `A` record and tenant `CNAME`s in Cloudflare; report orphans |
@@ -929,7 +1055,7 @@ Rules: forward-only (no down scripts; rollback = restore the snapshot); a change
 | Artifact | Registry / format | Built by | Contents | Used by |
 |---|---|---|---|---|
 | Custom images: `erpnext`, `gibbon`, `local-vps` | OCI images in GHCR; tags `<upstream-version>-<build>` and `sha-<commit>` | `publish.yml` → `publish-images` when the plan marks an image changed | Pinned upstream release + our patches/config | Compose, pinned by digest |
-| Tenant packages | OCI artifacts in GHCR via **ORAS** (`ghcr.io/<owner>/nigu-lite/tenants/<product>/<id>:<version>`) + `.tar.gz` on GitHub Releases | `publish.yml` → `publish-tenants` when the plan marks a tenant changed | `tenant.yml`, `README.md`, `assets/` (logo, header, CSS), `migrations/` (§7.2). **Never `vault.yml`.** | Ansible pulls by digest and unpacks on the VPS |
+| Tenant packages | OCI artifacts in GHCR via **ORAS** (`ghcr.io/<owner>/nigu-lite/tenants/<product>/<id>:<version>`) + `.tar.gz` on GitHub Releases | `publish.yml` → `publish-tenants` when the plan marks a tenant changed | `tenant.yml`, `README.md`, `assets/`, `migrations/`, and optional `knowledge/` Markdown plus generated 512-dimensional embedding indexes (§4.8, §7.2). **Never `vault.yml`, provider API keys or private documents.** | Ansible pulls by digest, installs assets/migrations and loads the tenant's vectors into its own MariaDB database |
 | SBOM + signatures | CycloneDX SBOM + **keyless cosign** signature on every image and package (GitHub Actions OIDC identity, Fulcio certificate, public Rekor log; no signing key to store or rotate) | Same workflows | — | Deploy verifies the signature against the expected workflow identity (`--certificate-identity` = `publish.yml` on `main` or a `v*` tag, issuer `token.actions.githubusercontent.com`) |
 | Third-party images (Traefik, MariaDB, LLDAP, …) | Not rebuilt; pinned by digest in `versions.yml` | Renovate PRs | — | Compose |
 
@@ -993,7 +1119,7 @@ flowchart LR
 
 - **Catalog** (`scripts/ci/catalog.py` → `catalog.json`): every module with type, product, path, inputs and dependencies. Module types: `image` (`erp/images/erpnext`, `edu/images/gibbon`, `local`), `tenant` (`<product>/tenants/<id>`, `tests/tenants/...`), `vps` (`deployments/<vps>.yml`), `role` (Ansible roles per product).
 - **Validate** in the same job: manifest schema, tenant files, unknown/duplicate tenants, capacity (≤ 10 + 10 per VPS), `versions.yml` pins and checksums, reserved tenant IDs, no unencrypted `vault.yml`.
-- **Plan** (`scripts/ci/plan.py` → `plan.json` + matrices as job outputs): maps changed paths to modules, then follows dependencies. Examples: `versions.yml` Gibbon bump → `gibbon` image + every edu tenant on that version + every VPS hosting them; `edu/ansible/**` → all edu tenants + their VPSs; `core/**` → all VPSs; a tenant's `assets/` → only that tenant package. Manual runs accept `modules=all` or a list.
+- **Plan** (`scripts/ci/plan.py` → `plan.json` + matrices as job outputs): maps changed paths to modules, then follows dependencies. Examples: `versions.yml` Gibbon bump → `gibbon` image + every edu tenant on that version + every VPS hosting them; an embedding-model/chunking bump → every AI-enabled tenant plus each VPS using it; `edu/ansible/**` → all edu tenants + their VPSs; `core/**` → all VPSs; a tenant's `assets/` or `knowledge/` → only that tenant package. Manual runs accept `modules=all` or a list.
 - An empty matrix skips the job (no wasted minutes); the report says why.
 
 #### Build (`build.yml`)
@@ -1012,7 +1138,7 @@ flowchart LR
 |---|---|---|---|
 | `catalog` | — | Inventory + validation above; uploads `catalog.json` | Any validation error |
 | `plan` | `catalog` | Change plan, matrices | Unknown module mapping |
-| `build-modules` (matrix) | `plan` | **image:** `make image-build` with layer cache, no push; Trivy image; size and layer count; SBOM. **tenant:** `make tenant-package` dry run (content allow-list, no secrets, size limit) | Build error; Trivy CRITICAL/HIGH with fix (outside `.trivyignore`); package rule violation |
+| `build-modules` (matrix) | `plan` | **image:** `make image-build` with layer cache, no push; Trivy image; size and layer count; SBOM. **tenant:** `make tenant-package` dry run (content allow-list, no secrets, size limit, Markdown front matter and migration checks); for AI-enabled tenants, `knowledge-build` verifies chunk checksums, model identity and exactly 512 values per vector | Build error; Trivy CRITICAL/HIGH with fix (outside `.trivyignore`); package rule violation; knowledge/model mismatch |
 | `quality` | `catalog` | `make lint test-unit scan` (pre-commit incl. actionlint/zizmor, unit tests with JUnit + coverage, Trivy fs/secret/config on Dockerfiles); PR title, branch and commit rules (§11.5) | Any failure |
 | `report` | all (`if: always()`) | Merge job results into the report; set the workflow's final status | Any needed job failed |
 
@@ -1059,7 +1185,7 @@ flowchart LR
 |---|---|---|
 | `plan` | — | Modules changed since the last successful publish (stored as the `published` git tag ref); everything on a version tag |
 | `publish-images` | one leg per changed image | Rebuild with the layer cache from Build; Trivy gate; SBOM; push `sha-<commit>` (+ `<upstream>-<build>` / `vX.Y.Z` on tags); cosign sign + attach SBOM attestation. amd64 only (Contabo) |
-| `publish-tenants` | one leg per changed tenant | Package (`tenant.yml`, `README.md`, `assets/`, `migrations/`), migration checksums + version guards checked, Trivy secret scan on the package, ORAS push, cosign sign; `.tar.gz` kept for the release |
+| `publish-tenants` | one leg per changed tenant | Package (`tenant.yml`, `README.md`, `assets/`, `migrations/`, optional `knowledge/`), migration checksums + version guards and embedding model metadata checked, Trivy secret scan plus a custom public-knowledge policy scan, ORAS push, cosign sign; `.tar.gz` kept for the release |
 | `lock-vps` | one leg per VPS manifest | Resolve every image/package digest that VPS needs into `<vps>.lock.yml`; verify each signature; diff against the committed lock |
 | `release` | — | Tags only: GitHub Release with notes from PR titles, tenant tarballs, `<vps>.lock.yml` files, `digests.json` |
 | `report` | — | What was published (name, tag, digest, size, signature, SBOM), lock diffs per VPS |
@@ -1237,6 +1363,7 @@ flowchart LR
 | Unit | `tests/unit/` | Manifest validation, Jinja2 rendering (Compose, Caddyfile, Traefik routes), scripts | `make test-unit`, `build.yml` → `quality` |
 | Security | `make scan` | Trivy fs/config/secret/image | Local before PR; `build.yml` (blocking), `iac-security.yml` (advisory, PR + nightly), `publish.yml` (image gate) |
 | Integration | `tests/integration/` | Deploy local env with test tenants; per-tenant `/_health` (one unhealthy test school must not affect the other), login (SSO + local), ERPNext site per tenant, GST report on synthetic data, Gibbon isolation tests (school A cannot read school B files/DB/sessions), backup → restore of one tenant | `make test-integration`; CI `integration.yml` on **GitHub-hosted runner** (privileged simulator; Sysbox is not available there), triggered **on merge to `main` and manually** (`workflow_dispatch`) |
+| AI retrieval | `tests/integration/ai/` | Publish and load synthetic Markdown knowledge; tenant/role isolation; exactly four ranked citations; empty/out-of-date knowledge; invalid provider key; provider timeout; session-context allow-list; prompt-injection attempts; no cross-tenant retrieval or prompt logging | S4/S5; provider calls use a deterministic mock by default |
 | Upgrade | `tests/integration/upgrade/` | Old → new version on test tenants, DB update, health, isolation, rollback drill | `make upgrade-test` locally before the PR (report attached); CI on merge/manual like integration |
 | Benchmarks | `tests/benchmarks/` | k6 scenarios per §9.1 (`edu-*`, `erp-*`, `capacity-10x10`, `stress-10x10`), resources via `docker stats` + Beszel snapshots | Before/after changes affecting runtime/resources; results committed |
 
@@ -1245,6 +1372,12 @@ flowchart LR
 **Identity storage tests (S3):** verify LLDAP and Authelia persist state across container recreation using separate SQLite volumes, remain usable when MariaDB is stopped, and recover from consistent SQLite snapshots with the required secrets. Confirm staff login/MFA and wg-portal OIDC after restore; tenant admins continue to use native app login.
 
 **School routing tests (S4):** on both test schools, verify each school hostname routes only to its selected Gibbon tenant at `/`, with no default-tenant fallback. Exercise native login/logout, CSS/JS, uploads/downloads and module links. Verify school-only-app selections, cross-school file/DB/session isolation, upgrade/rollback with the unchanged base URL, public denial of health paths, blocked `/config.php` and upload PHP, and no edge caching or ads on school hosts. Rendered unit tests verify Traefik host routing and Cloudflare bypass expressions; production cache checks run in S6.
+
+**AI chat tests (S4/S5):** package the same synthetic Markdown into `test-school-a/b` and
+`test-company-a/b`, then query each through the shared model. Verify exactly four tenant-owned sources,
+audience filtering, source citations, expired-document handling, empty-answer behavior and complete
+cross-tenant isolation. The provider adapter is mocked in unit and integration runs; a separately
+approved smoke test verifies Gemini/OpenAI request shape without logging prompt contents.
 
 Because integration tests do not run on PRs, the PR checklist requires the local `make test-integration` result, and a failed post-merge run blocks the next deploy (`make deploy` checks the latest `integration.yml` status for the commit).
 
@@ -1260,13 +1393,14 @@ These are **initial targets** (estimates). The first S4/S5 runs calibrate them; 
 - School: 500 students, 40 staff, one academic year of timetable and attendance.
 - ERP company: GST-enabled, 300 customers, 500 items, 5,000 sales invoices per year (~420 per month), 2,000 purchase invoices.
 
-**Load levels** (concurrent active users = k6 virtual users with 5–15 s think time; req/s counts dynamic requests only, static asset requests are excluded):
+**Load levels** (concurrent active users = k6 virtual users with 5–15 s think time; req/s excludes
+static assets and provider generation is mocked unless a separately approved test says otherwise):
 
-| Level | When (IST) | Gibbon (10 schools) | ERPNext (10 companies) |
+| Level | Time (IST) | Gibbon load | ERPNext load | AI retrieval load |
 |---|---|---|---|---|
-| **Low** | Evenings, weekends | 20 users (2 per school), ~2 req/s | 10 users (1 per company), ~1 req/s |
-| **Moderate** | School day 10:00–15:00; business hours | 100 users (10 per school), ~10 req/s: timetable, student profiles, markbook views | 40 users (4 per company), ~5 req/s: list views, create/submit invoices, stock entries |
-| **High (peak)** | Gibbon: 08:00–09:30 attendance, results day. ERP: month-end, GSTR-1 (by 11th) and GSTR-3B (by 20th) filing days | 300 users (30 per school, one school at 100 for results day), ~30 req/s with attendance-submit bursts | 100 users (10 per company), ~12 req/s incl. 5 concurrent heavy reports (GSTR-1, Accounts Receivable, Stock Balance) and bulk invoice submit |
+| Low | Evenings and weekends | 20 users; ~2 req/s | 10 users; ~1 req/s | 5 concurrent searches |
+| Moderate | School day 10:00–15:00 and business hours | 100 users; ~10 req/s | 40 users; ~5 req/s | 30 concurrent searches |
+| High | Attendance/results peak and GST filing peak | 300 users; ~30 req/s | 100 users; ~12 req/s | 100 concurrent searches |
 
 **Targets** (measured over the steady phase):
 
@@ -1293,11 +1427,12 @@ These are **initial targets** (estimates). The first S4/S5 runs calibrate them; 
 | `erp-low`, `erp-moderate`, `erp-high` | ERPNext only, at that level | Matching column above |
 | `capacity-10x10` | `edu-high` + `erp-moderate` at the same time (school morning on a normal business day) | **High** column. Gate before a VPS gets its 10th tenant of either product |
 | `stress-10x10` | `edu-high` + `erp-high` at the same time (school morning on a GST filing day) | Survival: error rate < 2 %, no OOM kill, no container restart, back to Moderate targets within 5 min after load stops |
+| `ai-retrieval-10x10` | 100 concurrent shared `ai-embed` queries, mixed between 10 school and 10 ERP tenant databases; vector + full-text candidates are fused into four chunks; provider generation is mocked at the network boundary | Query embedding + hybrid MariaDB retrieval p95 ≤ 250 ms, no 5xx, one model process only, RSS ≤ 350 MB; Recall@4 ≥ 0.85 and source attribution ≥ 0.95 on the fixed evaluation set |
 
 Rules:
 - Each run: 5 min ramp-up, 15 min steady, 2 min ramp-down.
 - **Acceptance runs** measure the origin, not Cloudflare: k6 connects over WireGuard to the VPS with the tenant `Host` header (the origin lockdown blocks direct public access). They use the real VPS (or identical hardware) with k6 on a separate machine, before onboarding real tenants (S6) and after each major upgrade. Local simulator runs are only for before/after comparison of a change, not acceptance.
-- Missing a target: tune first (MariaDB buffer pool, FrankenPHP threads, Gunicorn workers, page cache); otherwise lower the per-VPS tenant limit (update `docs/lld/capacity.md` and the validator) or scale out (§3.2); changing the 10 + 10 model itself is an ADR.
+- Missing a target: tune first (MariaDB buffer pool, vector-index memory, FrankenPHP threads, Gunicorn workers, page cache); otherwise lower the per-VPS tenant limit (update `docs/lld/capacity.md` and the validator) or scale out (§3.2); changing the 10 + 10 model itself is an ADR.
 
 ---
 
@@ -1779,14 +1914,16 @@ The legend in `docs/diagram-style.md` shows every class, a subgraph, an added an
 
 ## 12. Staged Implementation Plan
 
-A stage ends when its exit checks pass. S4 and S5 both depend only on S3 and can be done in either order.
+A stage ends when its exit checks pass. S4 and S5 both depend on S3. S4 creates the one shared
+`ai-embed` service and Gibbon chat; S5 adds the ERP adapter without another model. S6 accepts both
+only after retrieval quality, RAM, isolation and provider-boundary gates pass.
 
 ```mermaid
 flowchart LR
-  S0["S0 Repo foundation"] --> S1["S1 CI + scanning"] --> S2["S2 Local env"] --> S3["S3 Core platform"]
-  S3 --> S4["S4 Edu: Gibbon"]
-  S3 --> S5["S5 ERP"]
-  S4 & S5 --> S6["S6 First VPS"] --> S7["S7 Ads"] --> S8["S8 Scale-out"]
+  S0["S0 Repo foundation"] --> S1["S1 CI + scanning"] --> S2["S2 Local env"] --> S3["S3 Core<br/>MariaDB 11.8 vectors"]
+  S3 --> S4["S4 Edu: Gibbon<br/>shared ai-embed + chat"]
+  S3 --> S5["S5 ERP<br/>same embedding contract"]
+  S4 & S5 --> S6["S6 First VPS<br/>AI + provider gates"] --> S7["S7 Ads"] --> S8["S8 Scale-out<br/>AI per cluster"]
   class S6 edge
   class S4,S5 app
   class S3,S8 core
@@ -1802,12 +1939,12 @@ flowchart LR
 | **S0 — Repo foundation** (single initial commit) | Create public repo (`main`, AGPL-3.0 `LICENSE`, `SECURITY.md`); `AGENTS.md` + `.github/instructions/*`; `.editorconfig`, `.gitattributes`, `.gitignore`, `.tool-versions`, `.pre-commit-config.yaml`; Makefile skeleton; `docs/templates/*` (README, ADR, SDD, LLD, tenant, VPS manifest); PR template with mermaid section; `commit-msg` hook + branch rules; `make setup` / `make doctor` with `scripts/setup/steps/*` (zero manual developer setup); `versions.yml`; baseline ADR `0001-platform-baseline.md` (D1–D27) and LLD template; root/product READMEs; repo settings (squash only, secret scanning + push protection, Dependabot alerts, private vulnerability reporting) | `make setup lint` passes on a clean clone; templates render; AGENTS index matches files |
 | **S1 — CI, scanning, manifests, unit tests** | `scripts/ci/` catalog, plan and report (+ unit tests); `build.yml`, `iac-security.yml`, `publish.yml`, `retention.yml` (§7.5); pre-commit incl. actionlint/zizmor; Trivy fs/config/secret + SARIF upload; KICS + conftest evaluation; PR title/branch checks; publish with ORAS + keyless cosign, proven with the `local-vps` image and a test tenant package; Renovate (`patch/` branches); manifest schema + validator; Jinja2 render tests; test tenant skeletons in `tests/tenants/`; enable the `main` ruleset (§7.4) | CI green; invalid manifests fail before remote tasks; deploy without `VPS=` fails; each workflow uploads `report.md` + `report.html`; a docs-only PR builds no modules; a direct push to `main` is rejected |
 | **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); Docker Engine `make setup` step; `deployments/local.yml`; `tls.mode` (self-signed); MinIO; `make local-up/down/reset/deploy` | Fresh clone → `make local-up local-deploy` gives a running edge with a test route |
-| **S3 — Core platform** | Host baseline roles (`host_kernel` tagged), Traefik (file provider, `selfsigned`, ACME DNS-01 resolver), MariaDB, LLDAP (groups `admin`/`ops`/`support`), Authelia (access rules + OIDC policies), wg-portal (OIDC), Beszel, Dozzle, DBX with the protection chain + LDAP Studio, backups (restic → S3), `db-shell`, `s3-ls`; Cloudflare role (render + check mode only) | Integration tests: health, per-tenant DB provisioning, backup → restore, **access matrix §13.1**, Traefik sees `10.10.0.x` client IPs in the local env |
-| **S4 — Edu: Gibbon spike then pilot** | Spike: FrankenPHP image + pinned Gibbon + `tenant-guard.php`; isolation tests (cross-tenant file/DB/session access must fail); verify Gibbon root-path compatibility; benchmark vs per-school containers. Pilot: per-school Traefik host routers + Caddy blocks from manifest; tenant assets + SQL migrations from signed packages; per-school `/_health` + Traefik health checks; side-by-side versions + `make upgrade-test` | Isolation suite passes, or fallback (D7) is decided by ADR; benchmark results committed; two test schools pass integration and host-routing tests (§9); an unhealthy test school does not affect the other; upgrade + rollback drill passes; `edu-*` benchmarks recorded against §9.1 |
-| **S5 — ERP pilot** | ERPNext + India Compliance image (Trivy-scanned, SBOM); multi-site bench; site lifecycle (create/restore/retire) from manifest; tenant JSON migrations via REST API + `Nigu Migration` DocType; assets; SMTP | Two test companies; GSTR report on synthetic data; per-site restore; `erp-*` benchmarks recorded against §9.1 |
-| **S6 — First VPS** | `deployments/vps-01.yml`; production secrets in Vault; Cloudflare zones, tokens, zone settings, cache rules; Let's Encrypt staging → production; `make dns-sync`; origin lockdown; external uptime checks; runbooks; `make s3-check` against the production object store; go-live checklist §12.1 | Deploy from clean VPS succeeds; checklist §12.1 complete; `s3-check` and `access-check` pass; `capacity-10x10` and `stress-10x10` pass on the VPS before real tenants; restore drill passes; Trivy has no unaddressed CRITICAL/HIGH |
+| **S3 — Core platform** | Host baseline roles (`host_kernel` tagged), Traefik (file provider, `selfsigned`, ACME DNS-01 resolver), MariaDB 11.8 LTS after ERPNext/Gibbon compatibility proof, LLDAP (groups `admin`/`ops`/`support`), Authelia (access rules + OIDC policies), wg-portal (OIDC), Beszel, Dozzle, DBX with the protection chain + LDAP Studio, backups (restic → S3), `db-shell`, `s3-ls`; Cloudflare role (render + check mode only) | Integration tests: health, per-tenant DB provisioning, native vector type/index smoke test, backup → restore, **access matrix §13.1**, Traefik sees `10.10.0.x` client IPs in the local env |
+| **S4 — Edu: Gibbon spike then pilot** | Spike: FrankenPHP image + pinned Gibbon + `tenant-guard.php`; isolation tests (cross-tenant file/DB/session access must fail); verify Gibbon root-path compatibility; benchmark vs per-school containers. Pilot: per-school Traefik host routers + Caddy blocks from manifest; tenant assets + SQL migrations from signed packages; per-school `/_health` + Traefik health checks; side-by-side versions + `make upgrade-test`; one shared `ai-embed` Model2Vec service; CI-generated knowledge indexes; Gibbon AI chat with tenant-admin Gemini/OpenAI key | Isolation suite passes, or fallback (D7) is decided by ADR; benchmark results committed; two test schools pass integration and host-routing tests (§9); an unhealthy test school does not affect the other; school A cannot retrieve school B knowledge; two synthetic schools answer four cited chunks through a mocked provider; `ai-embed` stays within its RAM target; upgrade + rollback drill passes; `edu-*` and `ai-retrieval-*` benchmarks recorded against §9.1 |
+| **S5 — ERP pilot** | ERPNext + India Compliance image (Trivy-scanned, SBOM); multi-site bench; site lifecycle (create/restore/retire) from manifest; tenant JSON migrations via REST API + `Nigu Migration` DocType; assets; SMTP; ERP chat/knowledge adapter to the same shared `ai-embed` service and tenant knowledge-vector contract | Two test companies; GSTR report on synthetic data; per-site restore; ERP company A cannot retrieve company B or school knowledge; every AI-enabled ERP tenant uses the same loaded model; no second embedding process is loaded; `erp-*` and shared AI benchmarks recorded against §9.1 |
+| **S6 — First VPS** | `deployments/vps-01.yml`; production secrets in Vault; Cloudflare zones, tokens, zone settings, cache rules; Let's Encrypt staging → production; `make dns-sync`; origin lockdown; external uptime checks; tenant AI provider terms/keys in Vault; runbooks; `make s3-check` against the production object store; go-live checklist §12.1 | Deploy from clean VPS succeeds; checklist §12.1 complete; `s3-check` and `access-check` pass; `capacity-10x10`, `stress-10x10` and `ai-retrieval-10x10` pass on the VPS before real tenants; provider-key smoke test passes without retaining prompts; restore drill passes; Trivy has no unaddressed CRITICAL/HIGH |
 | **S7 — Advertising review (optional)** | Legal/provider-policy review of ERP-facing advertising (§10.4); do not build `nigu_ads` or enable ads until the review approves a specific non-sensitive surface | Written approval and documented boundaries before implementation; otherwise no advertising feature ships |
-| **S8 — Scale-out & monitoring** | Split to `core-01`/`erp-01`/`edu-01` by manifests; `mon-01` with Grafana + object store; reassess ad server | Moves tested in local env first; measured downtime |
+| **S8 — Scale-out & monitoring** | Split to `core-01`/`erp-01`/`edu-01` by manifests; one independent `ai-embed` model process per runtime cluster; `mon-01` with Grafana + object store; reassess ad server | Moves tested in local env first; measured downtime; no shared model state or knowledge coupling between clusters |
 
 ### 12.1 Deployment checklist (each new VPS, S6 and later)
 
@@ -1825,6 +1962,7 @@ flowchart LR
 | 10 | Backups to S3 and one restore | `make s3-check VPS=`, restore drill |
 | 11 | Benchmarks `capacity-10x10`, `stress-10x10` on this VPS (over WireGuard, origin) | `make bench` results committed |
 | 12 | Monitoring: Beszel agent reporting; UptimeRobot checks per tenant hostname | Beszel dashboard, alert test |
+| 13 | AI-enabled tenants: public-only knowledge, valid embedding index, Vault key present, provider adapter configured; `ai-embed` health green | `make ai-check VPS= ID=` with provider mocked; approved real-provider smoke test |
 
 ### Ongoing change workflow
 
@@ -1846,6 +1984,8 @@ flowchart LR
 | Edge | Cloudflare proxy (DDoS, TLS Full strict); real client IP from trusted Cloudflare ranges only; optional Authenticated Origin Pulls |
 | Secrets | Ansible Vault; per-tenant `vault.yml`; Trivy secret scan in pre-commit + CI |
 | Tenant isolation | DB + user per tenant; Frappe site isolation; Gibbon controls §5.2 |
+| AI / knowledge | Public, tenant-approved Markdown only in tenant packages; CI creates pinned 512-dimensional vectors; one internal Model2Vec service per VPS; provider keys in Vault; prompt text not logged; no automatic student PII in provider requests |
+| AI provider boundary | Gemini/OpenAI receives the tenant's question, selected non-sensitive knowledge chunks and allow-listed session context; tenant terms/privacy notice name the provider and its data processing terms |
 | Supply chain | Pinned images/actions (SHA/digest), Trivy image/SBOM, cosign signatures verified at deploy, Renovate, upstream code via pinned release + checksum |
 | Updates | `unattended-upgrades`; Renovate PRs tested in local env first; app upgrades per §5.5 |
 | Backups | restic encrypted off-site; restore drill each release/monthly |
@@ -1884,7 +2024,14 @@ flowchart LR
 | 11 | Edge & DNS | Cloudflare free, two-tier records, Ansible API automation (D24, §3.4) |
 | 12 | VPN | wg-portal at `vpn.nigu.in`, OIDC via Authelia (D25) |
 | 13 | Access | LLDAP groups `admin`/`ops`/`support`; tenant users native only (D26, §13.1) |
+| 14 | School AI chat | One shared retrieval-tuned Model2Vec service per VPS; MariaDB 11.8 `VECTOR(512)` storage per tenant; publish-time embeddings; tenant provider key in Vault; Gibbon in S4 and ERP adapter in S5 (§4.8) |
 
 ### Remaining questions
 
 1. Confirm the proposed WireGuard ranges do not overlap with networks used by the operator's home, office, or VPN connections: staff devices use `10.10.0.0/24`, and VPS peers use `10.10.1.0/24`. An overlap can make traffic route to the wrong network; these ranges are provisional until checked.
+2. Confirm the first tenant's AI provider terms and data-processing requirements. The owner must approve
+   an ADR because this changes the external data-processing/trust boundary; no production AI call is
+   enabled until that decision and an approved `docs/lld/ai-assistant.md`.
+3. Confirm language coverage. `potion-retrieval-32M` is English-first; S4 must benchmark representative
+   school documents. Significant Indian-language requirements need a pinned multilingual static model
+   selected through the AI LLD, then one atomic re-embedding of all affected tenant packages.

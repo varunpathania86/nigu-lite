@@ -1,0 +1,159 @@
+name: Build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: all or comma-separated module IDs
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  NIGU_LOCAL_MODE: commit
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  catalog:
+    name: Catalog and validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Catalog
+        run: make container-catalog MODE="$NIGU_LOCAL_MODE" BASE=origin/main
+      - name: Upload catalog
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: part-catalog
+          path: report/act
+          retention-days: 1
+
+  plan:
+    name: Plan
+    needs: catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      modules: ${{ steps.export.outputs.modules }}
+      any: ${{ steps.export.outputs.any }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: part-catalog
+          path: report/act
+      - id: plan
+        env:
+          MODULES: ${{ inputs.modules }}
+        run: make container-plan MODE="$NIGU_LOCAL_MODE" BASE=origin/main MODULES="$MODULES"
+      - name: Export plan
+        id: export
+        run: make container-report-output GITHUB_OUTPUT="$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-plan
+          path: report/act
+          retention-days: 1
+
+  quality:
+    name: Quality
+    needs: catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: make container-quality MODE="$NIGU_LOCAL_MODE" BASE=origin/main
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-quality
+          path: report/act
+          retention-days: 1
+
+  build-modules:
+    name: Build module · ${{ matrix.module.id }}
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        module: ${{ fromJSON(needs.plan.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - env:
+          ID: ${{ matrix.module.id }}
+          TYPE: ${{ matrix.module.type }}
+        run: make container-module MODE="$NIGU_LOCAL_MODE" BASE=origin/main ID="$ID" TYPE="$TYPE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-module-${{ matrix.module.id }}
+          path: report/act
+          retention-days: 1
+
+  report:
+    name: Report
+    needs: [catalog, plan, quality, build-modules]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: part-*
+          path: report/parts
+          merge-multiple: true
+      - name: Upload Trivy SARIF
+        if: always() && env.ACT != 'true'
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          sarif_file: report/parts/trivy.sarif
+          category: trivy
+      - env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: make container-report MODE="$NIGU_LOCAL_MODE" BASE=HEAD WORKFLOW=build
+      - run: cat report/act/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-report-${{ github.run_number }}
+          path: |
+            report/act/report.md
+            report/act/report.html
+            report/act/report.json
+            report/parts
+          retention-days: 14
+      - name: Final status
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
