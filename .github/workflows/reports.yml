@@ -100,8 +100,3 @@ jobs:
           publish_dir: public
           destination_dir: ${{ needs.reports.outputs.report_dir }}
           keep_files: true
-      - name: Configure Pages source
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: make ci-pages-configure REPOSITORY="$GITHUB_REPOSITORY"
