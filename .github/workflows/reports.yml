@@ -1,0 +1,107 @@
+name: DevSecOps reports
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NIGU_LOCAL_MODE: commit
+
+concurrency:
+  group: reports-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reports:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    name: Generate reports
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    outputs:
+      report_dir: ${{ steps.destination.outputs.report_dir }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore Allure history
+        continue-on-error: true
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: gh-pages
+          path: .pages-history
+          persist-credentials: false
+      - name: Compute report directory
+        id: destination
+        env:
+          GIT_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: make ci-report-dir GIT_REF="$GIT_REF" REF_NAME="$REF_NAME" GITHUB_OUTPUT="$GITHUB_OUTPUT"
+      - name: Copy published Allure history
+        env:
+          REPORT_DIR: ${{ steps.destination.outputs.report_dir }}
+        run: >-
+          make ci-pages-history
+          SOURCE=".pages-history/$REPORT_DIR/allure/history"
+          OUT_DIR=report/act
+      - name: Generate security and SBOM reports
+        run: make container-security-reports MODE="$NIGU_LOCAL_MODE"
+      - name: Generate Allure report
+        run: make container-allure MODE="$NIGU_LOCAL_MODE"
+      - name: Generate report landing page
+        if: always()
+        run: make container-pages-index MODE="$NIGU_LOCAL_MODE"
+      - name: Upload Trivy SARIF
+        if: always() && github.ref == 'refs/heads/main' && env.ACT != 'true'
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          sarif_file: report/act/public/security/trivy-results.sarif
+          category: trivy-main-reports
+      - name: Upload Pages bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devsecops-pages
+          path: report/act/public
+          retention-days: 7
+
+  publish:
+    name: Publish report bundle
+    if: needs.reports.result == 'success'
+    needs: reports
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download Pages bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: devsecops-pages
+          path: public
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.0.0
+        with:
+          github_token: ${{ github.token }}
+          publish_branch: gh-pages
+          publish_dir: public
+          destination_dir: ${{ needs.reports.outputs.report_dir }}
+          keep_files: true
+      - name: Configure Pages source
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: make ci-pages-configure REPOSITORY="$GITHUB_REPOSITORY"

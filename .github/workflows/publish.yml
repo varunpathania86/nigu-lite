@@ -1,0 +1,99 @@
+name: Publish
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NIGU_LOCAL_MODE: commit
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish signed OCI artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish signed OCI artifacts
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: make container-publish MODE="$NIGU_LOCAL_MODE" BASE=HEAD^ REGISTRY="$REGISTRY"
+      - name: Upload publish evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: publish-report-${{ github.run_number }}
+          path: report/act
+          retention-days: 14
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download publish evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: publish-report-${{ github.run_number }}
+          path: report/act
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: make container-release MODE="$NIGU_LOCAL_MODE"
+  report:
+    name: Report
+    needs: [publish, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download publish evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: publish-report-${{ github.run_number }}
+          path: report/parts
+      - name: Generate final report
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: make container-report MODE="$NIGU_LOCAL_MODE" BASE=HEAD WORKFLOW=publish
+      - name: Upload final report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: publish-final-report-${{ github.run_number }}
+          path: |
+            report/act/report.md
+            report/act/report.html
+            report/act/report.json
+          retention-days: 14

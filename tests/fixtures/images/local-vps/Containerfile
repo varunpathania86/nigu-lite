@@ -1,0 +1,9 @@
+FROM ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
+
+LABEL org.opencontainers.image.source="https://github.com/varunpathania86/infra"
+LABEL org.opencontainers.image.description="Service-free S1 local-vps OCI pipeline fixture"
+
+RUN printf 'Stage 1 package fixture only; no runtime service.\\n' >/opt/nigu-local-vps.txt
+USER 65532:65532
+HEALTHCHECK NONE
+CMD ["cat", "/opt/nigu-local-vps.txt"]

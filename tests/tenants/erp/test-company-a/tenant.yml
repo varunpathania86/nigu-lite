@@ -1,0 +1,13 @@
+schema_version: 1
+id: test-company-a
+product: erp
+display_name: Test Company A
+domains:
+  primary: test-company-a.erpos.in
+  custom_domains: []
+apps: [erpnext]
+branding:
+  logo: assets/logo.svg
+  header: assets/header.svg
+  css: assets/override.css
+migrations: migrations/

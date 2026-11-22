@@ -121,9 +121,30 @@ proxy, edge TLS); Let's Encrypt (origin certificates); an S3-compatible object s
 * **Operations (`core/`):** db-backup + restic, Beszel, Dozzle, DBX (VPN-only database workbench).
 * **ERP product (`erp/`):** ERPNext v15 + India Compliance as one multi-site bench (one site per company).
 * **Edu product (`edu/`):** GibbonEdu in one FrankenPHP container with one Caddy site block per school.
-* **Delivery (`scripts/`, `.github/`, `deployments/`):** Makefile entry point, manifest validator, CI build/scan/sign/
-  publish, Ansible playbooks.
+* **Workspace (`scripts/`, `.github/`, `deployments/`):** Git, documentation and source snapshots initiated through the
+  Makefile; no application services, Kubernetes workloads or deployment.
+* **Build (`.github/build/`, `scripts/ci/`):** ephemeral CI/Act containers for lint, tests, scans, packaging,
+  signing and reports. They receive immutable source snapshots and are destroyed after each run.
+* **Delivery (`deployments/`, GHCR):** validated manifests, signed OCI images and tenant packages. Deployment from
+  the registry to runtime remains a later-stage concern.
 * **Local environment (`local/`):** a systemd + Docker container that acts as a VPS for the same playbooks.
+
+S1 delivery preserves this strict sequence:
+
+```mermaid
+flowchart LR
+  W["Workspace Container"] --> S["Immutable source snapshot"]
+  S --> B["Ephemeral Build Container"]
+  B --> R[("Persistent registry")]
+  R -.-> D["Future deployment"]
+  D -.-> T["Future runtime cluster"]
+  class W,S,B,D tool
+  class R data
+  class T app
+  classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
+  classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
+  classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
+```
 
 ### 2.3 Design Rationale & Trade-Offs
 The baseline decisions D1–D27 are recorded in [ADR 0001](../adr/0001-platform-baseline.md); the main trade-offs:
@@ -313,6 +334,7 @@ n/a: no custom screens. Key workflows: tenant login on its hostname; staff login
 | G3 | ≤ 10 schools + 10 companies on 4 vCPU / 8 GB | §2.4, master-plan.md §6 | — | `capacity-10x10`, `stress-10x10` benchmarks |
 | G4 | Independent VPSs, no cluster | §2.1, §2.4 | — | S8 moves rehearsed locally |
 | G5 | Reproducible IaC | §2.2 Delivery | — | Jinja2 render tests; deploy from clean VPS (S6) |
+| G5-CI | Build, scan and publish outside the Workspace | §2.2 Build and registry | SEC-4 | Snapshot and Build Container tests (S1) |
 | G8 | Tenants per VPS from one manifest | §4.1 Manifest validator | — | Validator unit tests (S1) |
 | SEC-1 | Tenant data isolation | §5.2 Isolation | DPDP Act (security safeguards) | S4 isolation suite; per-tenant DB grants test |
 | SEC-2 | Staff access by group with MFA | §5.1 | DPDP Act (security safeguards) | `make access-check`, `tests/integration/access/` |

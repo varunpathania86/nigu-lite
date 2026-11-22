@@ -6,10 +6,12 @@ applyTo: 'scripts/setup/**,.tool-versions'
 
 - Goal: after `git clone`, `make setup` is the only command; developers never install anything by hand.
 - `make setup` runs `scripts/setup/setup.sh`, which runs every `scripts/setup/steps/NN-<name>.sh` in order.
+- Docker Engine is the only Workspace-side build daemon; Act and local CI use it to create Build Containers.
 - `make doctor` runs the same steps check-only and changes nothing; use it to diagnose a machine.
 - Every new dependency ships with its setup in the same PR; code or a Make target needing an uninstalled tool is incomplete.
 - Prefer, in order: a `.tool-versions` pin → another mise backend (`aqua:`, `pipx:`, `npm:`, `ubi:`) → a new step file.
 - Add a step only for what mise cannot install: Docker Engine, OS packages, kernel modules, group membership.
+- Act is pinned in `.tool-versions`; its project configuration may access the Docker socket only in orchestration scripts.
 - A step defines `step_describe` (one line), `step_check` (read-only, exit 0 when ready) and `step_install`.
 - Steps are idempotent: re-running `make setup` on a ready machine changes nothing and prints `ok` for each step.
 - `step_check` verifies the real requirement (version, daemon running, group membership), not just a file.

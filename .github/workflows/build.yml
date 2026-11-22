@@ -1,0 +1,215 @@
+name: Build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: all or comma-separated module IDs
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  NIGU_LOCAL_MODE: commit
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.8.2
+        with:
+          comment-summary-in-pr: always
+          fail-on-severity: high
+  catalog:
+    name: Catalog and validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Catalog
+        run: make container-catalog MODE="$NIGU_LOCAL_MODE" BASE=origin/main
+      - name: Upload catalog
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: part-catalog
+          path: report/act
+          retention-days: 1
+
+  plan:
+    name: Plan
+    needs: catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      modules: ${{ steps.export.outputs.modules }}
+      any: ${{ steps.export.outputs.any }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download catalog
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: part-catalog
+          path: report/act
+      - name: Plan affected modules
+        id: plan
+        env:
+          MODULES: ${{ inputs.modules }}
+        run: make container-plan MODE="$NIGU_LOCAL_MODE" BASE=origin/main MODULES="$MODULES"
+      - name: Export plan
+        id: export
+        run: make container-report-output GITHUB_OUTPUT="$GITHUB_OUTPUT"
+      - name: Upload plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-plan
+          path: report/act
+          retention-days: 1
+
+  quality:
+    name: Quality
+    needs: catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run lint, unit tests and scans
+        run: make container-quality MODE="$NIGU_LOCAL_MODE" BASE=origin/main
+      - name: Upload quality evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-quality
+          path: report/act
+          retention-days: 1
+
+  build-modules:
+    name: Build module · ${{ matrix.module.id }}
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        module: ${{ fromJSON(needs.plan.outputs.modules) }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build and scan module
+        env:
+          ID: ${{ matrix.module.id }}
+          TYPE: ${{ matrix.module.type }}
+        run: make container-module MODE="$NIGU_LOCAL_MODE" BASE=origin/main ID="$ID" TYPE="$TYPE"
+      - name: Upload module evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: part-module-${{ matrix.module.id }}
+          path: report/act
+          retention-days: 1
+
+  report:
+    name: Report
+    needs: [catalog, plan, quality, build-modules]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download job evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: part-*
+          path: report/parts
+          merge-multiple: true
+      - name: Upload Trivy SARIF
+        if: always() && env.ACT != 'true'
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          sarif_file: report/parts/trivy.sarif
+          category: trivy
+      - name: Install Reviewdog
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        uses: reviewdog/action-setup@d8edfce3dd5e1ec6978745e801f9c50b5ef80252 # v1.4.0
+        with:
+          reviewdog_version: v0.21.3
+      - name: Publish Trivy Reviewdog check and comments
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        run: >-
+          make ci-reviewdog
+          SARIF=report/parts/trivy.sarif
+          LINT_SARIF=report/parts/ruff.sarif
+      - name: Generate final report
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: make container-report MODE="$NIGU_LOCAL_MODE" BASE=HEAD WORKFLOW=build
+      - name: Add report to job summary
+        run: cat report/act/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload final report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-report-${{ github.run_number }}
+          path: |
+            report/act/report.md
+            report/act/report.html
+            report/act/report.json
+            report/parts
+          retention-days: 14
+      - name: Final status
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

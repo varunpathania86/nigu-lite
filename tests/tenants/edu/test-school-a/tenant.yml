@@ -1,0 +1,13 @@
+schema_version: 1
+id: test-school-a
+product: edu
+display_name: Test School A
+domains:
+  primary: test-school-a.schooledu.in
+  custom_domains: []
+apps: [gibbon]
+branding:
+  logo: assets/logo.svg
+  header: assets/header.svg
+  css: assets/override.css
+migrations: migrations/

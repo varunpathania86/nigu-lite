@@ -7,4 +7,7 @@ Status flow: `draft` → `approved` → `implemented` → `retired`.
 Moderate decisions (a library, a config layout, a Make target, a CI job, a tenant field) go in the LLD's
 "Decisions" section, not in an ADR.
 
-No LLDs yet; the first one (`ci.md`) opens Stage 1.
+Stage 1 LLDs:
+
+- [`ci.md`](ci.md): Workspace, Build Container, Act, registry and report architecture.
+- [`tenant-manifest.md`](tenant-manifest.md): deployment and tenant schema and validation.
