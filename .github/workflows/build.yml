@@ -50,22 +50,26 @@ jobs:
       modules: ${{ steps.export.outputs.modules }}
       any: ${{ steps.export.outputs.any }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download catalog
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: part-catalog
           path: report/act
-      - id: plan
+      - name: Plan affected modules
+        id: plan
         env:
           MODULES: ${{ inputs.modules }}
         run: make container-plan MODE="$NIGU_LOCAL_MODE" BASE=origin/main MODULES="$MODULES"
       - name: Export plan
         id: export
         run: make container-report-output GITHUB_OUTPUT="$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Upload plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: part-plan
@@ -78,12 +82,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: make container-quality MODE="$NIGU_LOCAL_MODE" BASE=origin/main
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Run lint, unit tests and scans
+        run: make container-quality MODE="$NIGU_LOCAL_MODE" BASE=origin/main
+      - name: Upload quality evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: part-quality
@@ -102,15 +109,18 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.plan.outputs.modules) }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - env:
+      - name: Build and scan module
+        env:
           ID: ${{ matrix.module.id }}
           TYPE: ${{ matrix.module.type }}
         run: make container-module MODE="$NIGU_LOCAL_MODE" BASE=origin/main ID="$ID" TYPE="$TYPE"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Upload module evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: part-module-${{ matrix.module.id }}
@@ -127,10 +137,12 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download job evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: part-*
           path: report/parts
@@ -141,11 +153,14 @@ jobs:
         with:
           sarif_file: report/parts/trivy.sarif
           category: trivy
-      - env:
+      - name: Generate final report
+        env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: make container-report MODE="$NIGU_LOCAL_MODE" BASE=HEAD WORKFLOW=build
-      - run: cat report/act/report.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Add report to job summary
+        run: cat report/act/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload final report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: build-report-${{ github.run_number }}
           path: |
