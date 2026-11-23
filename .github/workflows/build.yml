@@ -96,7 +96,6 @@ jobs:
 
   quality:
     name: Quality
-    needs: catalog
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -123,7 +122,6 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         module: ${{ fromJSON(needs.plan.outputs.modules) }}
     steps:
@@ -192,6 +190,20 @@ jobs:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
         run: >-
           make ci-reviewdog
+          SARIF=report/parts/trivy.sarif
+          LINT_SARIF=report/parts/ruff.sarif
+      - name: Publish Reviewdog PR summary
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          make ci-review-summary
           SARIF=report/parts/trivy.sarif
           LINT_SARIF=report/parts/ruff.sarif
       - name: Generate final report

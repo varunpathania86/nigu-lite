@@ -13,10 +13,10 @@ applyTo: '.github/workflows/**,scripts/ci/**'
 - Pin every action by commit SHA with a version comment; Renovate keeps them current.
 - Declare `permissions:` per job, read-only by default; `security-events: write` only on the report job that uploads SARIF.
 - Set `timeout-minutes` on every job; PR runs use `cancel-in-progress: true`, Publish uses `false`.
-- An empty matrix skips the job; the report explains why.
+- An empty matrix skips the job; independent legs run concurrently with `fail-fast: false`.
 - Each job writes `report/<job>[-<leg>].json` and `.md`; the `report` job runs `if: always()` and builds `report.md` + `report.html`.
 - Keep SARIF upload for persistent code scanning; Reviewdog consumes the same SARIF for PR review comments.
-- Reviewdog publishes both `github-pr-check` and `github-pr-review`; the check remains visible when SARIF has no findings.
+- Reviewdog publishes `github-pr-check` and `github-pr-review`; a sticky PR summary remains visible even when SARIF has no findings.
 - Reviewdog is non-blocking (`fail-level=none`); Trivy's original exit code remains the blocking security gate.
 - Dependency Review posts CVE and licence changes on same-repository PRs.
 - Static DevSecOps reports deploy only for `main` and tags to `gh-pages` subfolders; feature branches never publish Pages.

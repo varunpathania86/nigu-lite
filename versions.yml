@@ -5,6 +5,23 @@ schema_version: 1
 
 # --- Edge, data, identity, operations (core, S3) ---
 images: {}
+local:
+  simulator:
+    base_image: "ubuntu:24.04"
+    base_digest: sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
+  operations:
+    base_image: "python:3.14-slim"
+    base_digest: sha256:ac25e5afbfdb4a94ff99cc24b0345719210133144481480bcba6085efa36a341
+  traefik:
+    version: v3.5
+    digest: sha256:e157892efcf505bb9b3e5c79011ebf398e5f583acd240572e1a47f0b2044c74a
+  test_web:
+    image: nginx
+    version: 1.28-alpine
+    digest: sha256:0dcc88822d45581e65ae329f8be769762bf628d3b2bb7d2a077d4aa5c98b30e3
+  garage:
+    version: v2.5.0
+    digest: sha256:23b16d34e0348d9aca9b960a7429a7e6d494974b5288bfb8f6c3ab856895f71e
 ci:
   act_runner:
     image: catthehacker/ubuntu

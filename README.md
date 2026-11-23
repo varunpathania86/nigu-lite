@@ -1,7 +1,7 @@
 # nigu-lite
 
 > Free, ad-supported ERPNext (India GST) and GibbonEdu hosting for many tenants on low-end VPSs.
-> Owner: varunpathania86 · Status: experimental (Stage 1 — CI and scanning)
+> Owner: varunpathania86 · Status: experimental (Stage 2 — local environment)
 
 ## Overview
 
@@ -41,6 +41,8 @@ make doctor     # check the machine without changing it
 make lint       # pre-commit in an ephemeral Build Container
 make test-unit  # unit tests in an ephemeral Build Container
 make act-build  # execute the Build workflow through Act
+make local-up local-deploy  # start and configure the local VPS simulator
+make test-integration      # verify SSH, Docker, Traefik and Garage
 make help       # all targets
 ```
 
@@ -52,14 +54,15 @@ make help       # all targets
 | [`docs/`](docs/) | ADRs, LLDs, SDD, developer docs and templates |
 | [`core/`](core/), [`erp/`](erp/), [`edu/`](edu/) | Shared platform services and the two products |
 | [`scripts/`](scripts/) | Scripts called by the Makefile and git hooks |
-| [`tests/`](tests/) | Unit tests now; integration tests and benchmarks from later stages |
+| [`tests/`](tests/) | Unit, local integration and future benchmark suites |
 | [`deployments/`](deployments/) | Validated VPS manifests and future digest locks |
+| [`local/`](local/) | Local VPS simulator and ephemeral Operations Container |
 | [`policy/`](policy/) | Advisory rendered-IaC rules and accepted findings |
 | [`versions.yml`](versions.yml), [`.tool-versions`](.tool-versions) | Image/artifact pins and CLI tool pins |
 
-The delivery flow is Workspace snapshot → ephemeral Build Container → registry → future deployment →
-future runtime. The Workspace Container does not build or run application services. The `local/`
-runtime simulator is added in Stage 2.
+The delivery flow is Workspace snapshot → ephemeral Build Container → registry → Operations Container →
+runtime. The Workspace Container does not build or deploy services. Stage 2 proves the Operations
+Container and a local simulator; production deployment remains out of scope.
 
 ## Configuration
 
@@ -68,18 +71,18 @@ personal data.
 
 ## Operations
 
-Not deployable yet. `make deploy VPS=` validates that a target was explicitly selected, then reports that
-runtime deployment is not available before later stages. Progress follows master-plan.md §12.
+Production deployment remains out of scope. `make local-up local-deploy` starts the isolated simulator
+and serves `https://test-school-a.localhost:8443`; `make local-status` checks the complete local path.
 
 ## Tests
 
 `make test-unit` runs [`tests/unit/`](tests/unit/) inside a disposable Build Container.
-`make act-build` exercises the GitHub workflow locally without pushing source. See
-[tests/README.md](tests/README.md).
+`make test-integration` exercises SSH, inner Docker, Traefik and Garage through the local simulator.
+`make act-build` exercises the GitHub workflow locally without pushing source.
 
 ## Related
 
 - [Contributing and conventions](docs/developer/getting-started.md)
 - [Baseline ADR](docs/adr/0001-platform-baseline.md)
-- [CI LLD](docs/lld/ci.md) · [Manifest LLD](docs/lld/tenant-manifest.md)
+- [CI LLD](docs/lld/ci.md) · [Manifest LLD](docs/lld/tenant-manifest.md) · [Local environment LLD](docs/lld/local-environment.md)
 - [Security policy](SECURITY.md) · [Licence: AGPL-3.0](LICENSE)

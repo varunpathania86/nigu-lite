@@ -243,7 +243,7 @@ The platform's own data:
   uploads go to a local staging volume; restic uploads them encrypted to S3 with retention 7 daily / 4 weekly /
   6 monthly. Each VPS has its own key and restic password, limited to its prefix (master-plan.md §4.5).
 * **Restore:** per tenant (`make tenant-restore`); a restore drill runs each release and monthly; `make restore-test`
-  proves the path locally against MinIO.
+  proves the path locally against Garage.
 * **RPO / RTO:** to be fixed in `docs/lld/backup.md` (S3) and confirmed by the S6 restore drill.
 * **Upgrades:** a `pre-<version>` snapshot of every tenant before a product upgrade; rollback = route back + restore.
 * **Lifecycle:** tenants are added and moved only through manifests; the tenant-retire playbook deletes the tenant's

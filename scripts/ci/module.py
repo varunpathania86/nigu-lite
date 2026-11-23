@@ -40,7 +40,8 @@ def run(module: dict[str, object], root: Path, output: Path) -> dict[str, object
     if module["type"] == "image":
         context = path
         filename = "Containerfile" if (context / "Containerfile").is_file() else "Dockerfile"
-        tag = f"local-nigu/{module['id']}:{os.environ.get('SOURCE_TREE', 'unknown')[:12]}"
+        tag_suffix = os.environ.get("NIGU_LOCAL_IMAGE_TAG", os.environ.get("SOURCE_TREE", "unknown")[:12])
+        tag = f"local-nigu/{module['id']}:{tag_suffix}"
         subprocess.run(  # noqa: S603  # catalog-validated module path and fixed Docker executable
             [DOCKER, "build", "--file", str(context / filename), "--tag", tag, str(context)], check=True
         )

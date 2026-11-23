@@ -19,9 +19,10 @@ NIGU_REGISTRY_PORT ?= 5000
 HOST_PYTHON ?= python3
 
 .PHONY: help setup doctor lint test-unit scan check-docs fix-docs \
-	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-report \
-	ci-security-reports ci-allure ci-pages-index ci-report-dir ci-pages-configure \
-	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build
+	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-review-summary ci-report \
+	ci-security-reports ci-allure ci-pages-index ci-report-dir \
+	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build \
+	local-up local-deploy local-status local-down local-reset test-integration
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -137,6 +138,10 @@ ci-reviewdog: ## Publish Trivy and Ruff SARIF as PR checks and comments
 	reviewdog -f=sarif -name=Ruff -reporter=github-pr-check \
 		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
 
+ci-review-summary: ## Publish a visible PR summary for Trivy and Ruff
+	$(HOST_PYTHON) scripts/ci/review_summary.py --trivy "$(SARIF)" --ruff "$(LINT_SARIF)" \
+		--pull-request "$(PR_NUMBER)" --run-url "$(RUN_URL)"
+
 ci-security-reports: ## Generate static security and SBOM reports
 	mkdir -p $(OUT_DIR)/public/security $(OUT_DIR)/public/sbom
 	trivy fs --scanners secret,misconfig,vuln --skip-db-update --skip-check-update \
@@ -228,6 +233,24 @@ container-allure: ## Generate Allure reports in a Build Container
 
 container-pages-index: ## Generate the static report landing page
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-pages-index
+
+local-up: ## Start the local VPS simulator
+	bash local/scripts/up.sh
+
+local-deploy: local-up ## Deploy the Stage 2 local stack over SSH with Ansible
+	bash local/scripts/deploy.sh
+
+local-status: ## Check simulator, edge and S3 health
+	bash local/scripts/status.sh
+
+local-down: ## Stop the simulator and preserve its named volumes
+	bash local/scripts/down.sh
+
+local-reset: ## Remove the simulator, local network and local named volumes
+	bash local/scripts/reset.sh
+
+test-integration: local-deploy ## Run local simulator integration tests
+	$(PYTHON) -m unittest discover --start-directory tests/integration --top-level-directory . --verbose
 
 container-release: ## Create a tag release inside a trusted Build Container
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-release

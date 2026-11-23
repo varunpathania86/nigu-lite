@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import tarfile
@@ -12,6 +13,7 @@ from scripts.ci.pages import report_directory, write_index
 from scripts.ci.plan import plan
 from scripts.ci.report import final_status, html_report, markdown_report
 from scripts.ci.retention import retention_plan
+from scripts.ci.review_summary import findings, markdown
 from scripts.ci.sbom_html import components
 from scripts.ci.sbom_html import render as render_sbom
 from scripts.ci.snapshot import create_snapshot
@@ -123,6 +125,36 @@ class ReportTests(unittest.TestCase):
         self.assertIn("**Final status:** failure", markdown)
         self.assertIn("<style>", html_report("Build", markdown))
         self.assertNotIn("https://", html_report("Build", markdown))
+
+    def test_review_summary_reports_clean_tools(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            clean = Path(temporary) / "clean.sarif"
+            clean.write_text(json.dumps({"runs": [{"results": []}]}), encoding="utf-8")
+            summary = markdown(findings(clean), findings(clean), "https://github.invalid/run/1")
+        self.assertEqual(summary.count("No findings"), 2)
+        self.assertIn("<!-- nigu-reviewdog-summary -->", summary)
+        self.assertIn("https://github.invalid/run/1", summary)
+
+    def test_review_summary_counts_sarif_levels(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sarif = Path(temporary) / "results.sarif"
+            sarif.write_text(
+                json.dumps(
+                    {
+                        "runs": [
+                            {
+                                "results": [
+                                    {"level": "warning"},
+                                    {"level": "error"},
+                                    {"level": "warning"},
+                                ]
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(findings(sarif), {"warning": 2, "error": 1})
 
 
 class LockTests(unittest.TestCase):

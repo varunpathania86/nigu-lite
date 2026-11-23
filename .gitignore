@@ -24,6 +24,7 @@ htmlcov/
 /report/
 /dist/
 /.cache/
+local/.state/
 tests/benchmarks/tmp/
 bench-tenants/
 

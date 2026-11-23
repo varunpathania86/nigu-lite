@@ -1,0 +1,25 @@
+---
+schema_version: 1
+host: local
+environment: local
+public_ip: 127.0.0.1
+node_record: local.nigu.test
+control_plane: true
+dns:
+  provider: none
+tls:
+  mode: selfsigned
+wireguard:
+  subnet: 10.10.0.0/24
+  address: 10.10.0.254
+  port: 51820
+upgrade_day: saturday
+core_services:
+  - edge
+products:
+  erp:
+    tenants:
+      - test-company-a
+      - test-company-b
+  edu:
+    tenants: {}

@@ -66,6 +66,7 @@ fi
 NETWORK=none
 [[ "$TARGET" == "ci-publish" ]] && NETWORK=host
 for variable in GITHUB_TOKEN GITHUB_SHA GITHUB_REPOSITORY GITHUB_REPOSITORY_OWNER GITHUB_ACTOR GITHUB_REF_NAME \
+  NIGU_LOCAL_IMAGE_TAG \
   ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN; do
   [[ -n "${!variable:-}" ]] && DOCKER_ARGS+=(--env "$variable=${!variable}")
 done
