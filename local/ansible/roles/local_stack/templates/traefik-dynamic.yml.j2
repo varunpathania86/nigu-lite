@@ -1,0 +1,14 @@
+---
+http:
+  routers:
+    local-test:
+      rule: "Host(`{{ local_route_host }}`)"
+      entryPoints:
+        - websecure
+      service: local-whoami
+      tls: {}
+  services:
+    local-whoami:
+      loadBalancer:
+        servers:
+          - url: "http://test-web:80"

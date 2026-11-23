@@ -1,0 +1,31 @@
+---
+- name: Ensure host tooling is installed
+  ansible.builtin.apt:
+    name:
+      - docker-compose-v2
+      - python3
+      - python3-requests
+    state: present
+    update_cache: true
+
+- name: Configure Docker storage for nested containers
+  ansible.builtin.template:
+    src: docker-daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  register: local_docker_configuration
+
+- name: Restart Docker for local storage configuration
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+    enabled: true
+  when: local_docker_configuration.changed
+
+- name: Ensure Docker service is running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true

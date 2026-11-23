@@ -20,8 +20,9 @@ HOST_PYTHON ?= python3
 
 .PHONY: help setup doctor lint test-unit scan check-docs fix-docs \
 	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-report \
-	ci-security-reports ci-allure ci-pages-index ci-report-dir ci-pages-configure \
-	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build
+	ci-security-reports ci-allure ci-pages-index ci-report-dir \
+	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build \
+	local-up local-deploy local-status local-down local-reset test-integration
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -228,6 +229,24 @@ container-allure: ## Generate Allure reports in a Build Container
 
 container-pages-index: ## Generate the static report landing page
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-pages-index
+
+local-up: ## Start the local VPS simulator
+	bash local/scripts/up.sh
+
+local-deploy: local-up ## Deploy the Stage 2 local stack over SSH with Ansible
+	bash local/scripts/deploy.sh
+
+local-status: ## Check simulator, edge and S3 health
+	bash local/scripts/status.sh
+
+local-down: ## Stop the simulator and preserve its named volumes
+	bash local/scripts/down.sh
+
+local-reset: ## Remove the simulator, local network and local named volumes
+	bash local/scripts/reset.sh
+
+test-integration: local-deploy ## Run local simulator integration tests
+	$(PYTHON) -m unittest discover --start-directory tests/integration --top-level-directory . --verbose
 
 container-release: ## Create a tag release inside a trusted Build Container
 	MODE=$(MODE) bash scripts/act/run-build-container.sh ci-release

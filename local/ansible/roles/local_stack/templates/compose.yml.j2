@@ -1,0 +1,66 @@
+---
+name: "{{ local_project_name }}"
+
+services:
+  traefik:
+    image: "{{ traefik_image }}"
+    command:
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls=true
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --ping=true
+    ports:
+      - "443:443"
+    volumes:
+      - ./traefik:/etc/traefik/dynamic:ro
+    networks: [edge]
+    mem_limit: 128m
+    cpus: "0.50"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  test-web:
+    image: "{{ test_web_image }}"
+    networks: [edge]
+    mem_limit: 32m
+    cpus: "0.10"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  garage:
+    image: "{{ garage_image }}"
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: "{{ local_s3_access_key }}"
+      GARAGE_DEFAULT_SECRET_KEY: "{{ local_s3_secret_key }}"
+      GARAGE_DEFAULT_BUCKET: "{{ local_s3_bucket }}"
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    networks: [data]
+    mem_limit: 192m
+    cpus: "0.50"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+networks:
+  edge:
+  data:
+
+volumes:
+  garage-meta:
+  garage-data:

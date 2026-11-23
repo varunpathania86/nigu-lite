@@ -1,0 +1,22 @@
+ARG BASE_IMAGE=python:3.14-slim@sha256:ac25e5afbfdb4a94ff99cc24b0345719210133144481480bcba6085efa36a341
+FROM ${BASE_IMAGE}
+
+COPY requirements-ops.txt /tmp/requirements-ops.txt
+COPY requirements.yml /tmp/requirements.yml
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir -r /tmp/requirements-ops.txt \
+    && ansible-galaxy collection install -r /tmp/requirements.yml -p /usr/share/ansible/collections \
+    && python -m pip uninstall -y pip setuptools wheel
+
+RUN groupadd --gid 1000 ops \
+    && useradd --uid 1000 --gid 1000 --create-home ops
+
+ENV ANSIBLE_CONFIG=/workspace/local/ansible/ansible.cfg
+WORKDIR /workspace
+USER 1000:1000
+HEALTHCHECK NONE
+ENTRYPOINT ["/usr/local/bin/ansible-playbook"]

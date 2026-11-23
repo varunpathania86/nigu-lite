@@ -14,6 +14,28 @@ from scripts.manifests.validator import validate
 
 def build_catalog(root: Path) -> dict[str, Any]:
     modules: list[dict[str, Any]] = []
+    if (root / "local" / "Containerfile").is_file():
+        modules.append(
+            {
+                "id": "image-local-vps",
+                "type": "image",
+                "path": "local",
+                "product": "local",
+                "inputs": ["local/Containerfile", "local/entrypoint.sh", "local/scripts"],
+                "dependencies": [],
+            }
+        )
+    if (root / "local" / "operations" / "Containerfile").is_file():
+        modules.append(
+            {
+                "id": "image-local-operations",
+                "type": "image",
+                "path": "local/operations",
+                "product": "local",
+                "inputs": ["local/operations", "local/ansible"],
+                "dependencies": [],
+            }
+        )
     image_roots = (
         root / "core" / "images",
         root / "erp" / "images",

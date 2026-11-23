@@ -11,3 +11,4 @@ Stage 1 LLDs:
 
 - [`ci.md`](ci.md): Workspace, Build Container, Act, registry and report architecture.
 - [`tenant-manifest.md`](tenant-manifest.md): deployment and tenant schema and validation.
+- [`local-environment.md`](local-environment.md): Stage 2 VPS simulator and local Ansible delivery.
