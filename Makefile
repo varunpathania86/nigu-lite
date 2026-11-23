@@ -19,7 +19,7 @@ NIGU_REGISTRY_PORT ?= 5000
 HOST_PYTHON ?= python3
 
 .PHONY: help setup doctor lint test-unit scan check-docs fix-docs \
-	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-report \
+	manifest-validate ci-catalog ci-plan ci-quality ci-test-unit ci-scan ci-module ci-reviewdog ci-review-summary ci-report \
 	ci-security-reports ci-allure ci-pages-index ci-report-dir \
 	act-build act-iac act-publish registry-up registry-status registry-down deploy tenant-package image-build \
 	local-up local-deploy local-status local-down local-reset test-integration
@@ -137,6 +137,10 @@ ci-reviewdog: ## Publish Trivy and Ruff SARIF as PR checks and comments
 		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
 	reviewdog -f=sarif -name=Ruff -reporter=github-pr-check \
 		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
+
+ci-review-summary: ## Publish a visible PR summary for Trivy and Ruff
+	$(PYTHON) scripts/ci/review_summary.py --trivy "$(SARIF)" --ruff "$(LINT_SARIF)" \
+		--pull-request "$(PR_NUMBER)" --run-url "$(RUN_URL)"
 
 ci-security-reports: ## Generate static security and SBOM reports
 	mkdir -p $(OUT_DIR)/public/security $(OUT_DIR)/public/sbom

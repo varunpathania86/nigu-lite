@@ -194,6 +194,20 @@ jobs:
           make ci-reviewdog
           SARIF=report/parts/trivy.sarif
           LINT_SARIF=report/parts/ruff.sarif
+      - name: Publish Reviewdog PR summary
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          !github.event.pull_request.head.repo.fork &&
+          hashFiles('report/parts/trivy.sarif') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          make ci-review-summary
+          SARIF=report/parts/trivy.sarif
+          LINT_SARIF=report/parts/ruff.sarif
       - name: Generate final report
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

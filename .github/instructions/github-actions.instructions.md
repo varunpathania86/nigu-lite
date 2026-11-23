@@ -16,7 +16,7 @@ applyTo: '.github/workflows/**,scripts/ci/**'
 - An empty matrix skips the job; the report explains why.
 - Each job writes `report/<job>[-<leg>].json` and `.md`; the `report` job runs `if: always()` and builds `report.md` + `report.html`.
 - Keep SARIF upload for persistent code scanning; Reviewdog consumes the same SARIF for PR review comments.
-- Reviewdog publishes both `github-pr-check` and `github-pr-review`; the check remains visible when SARIF has no findings.
+- Reviewdog publishes `github-pr-check` and `github-pr-review`; a sticky PR summary remains visible even when SARIF has no findings.
 - Reviewdog is non-blocking (`fail-level=none`); Trivy's original exit code remains the blocking security gate.
 - Dependency Review posts CVE and licence changes on same-repository PRs.
 - Static DevSecOps reports deploy only for `main` and tags to `gh-pages` subfolders; feature branches never publish Pages.
