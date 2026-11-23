@@ -147,6 +147,7 @@ variables, not direct expression interpolation.
 | L7 | Publish static security, SBOM and Allure reports only for `main` and tags | Publish reports for every feature branch | Keeps Pages bounded while preserving per-release references; Pages source is configured once to `gh-pages` because `GITHUB_TOKEN` cannot administer repository Pages settings | S1 |
 | L8 | Convert one Trivy JSON report into SARIF, HTML and CycloneDX; render a local SBOM explorer | Run separate scans for each format | Avoids duplicate scanning and keeps package inventory available at zero vulnerabilities | S1 |
 | L9 | Publish a sticky PR summary for Trivy and Ruff totals | Checks and inline comments only | Keeps clean scans visible on the PR conversation page while Reviewdog handles changed-line comments | S2 |
+| L10 | Run up to four independent Build module legs concurrently | Serial module matrix | Reduces feedback time without exhausting runner capacity; failures remain isolated because `fail-fast` is disabled | S2 |
 
 ## 7. Security, isolation and privacy
 
@@ -207,3 +208,4 @@ deletions in dry-run or execution mode.
 |---|---|---|
 | 2026-11-21 | S1 | Defined Workspace, Build Container, registry and snapshot boundaries |
 | 2026-11-23 | S2 | Added visible clean/finding Reviewdog summaries to pull requests |
+| 2026-11-23 | S2 | Enabled bounded parallelism for independent module builds |
