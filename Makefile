@@ -139,7 +139,7 @@ ci-reviewdog: ## Publish Trivy and Ruff SARIF as PR checks and comments
 		-filter-mode=added -level=warning -fail-level=none < "$(LINT_SARIF)"
 
 ci-review-summary: ## Publish a visible PR summary for Trivy and Ruff
-	$(PYTHON) scripts/ci/review_summary.py --trivy "$(SARIF)" --ruff "$(LINT_SARIF)" \
+	$(HOST_PYTHON) scripts/ci/review_summary.py --trivy "$(SARIF)" --ruff "$(LINT_SARIF)" \
 		--pull-request "$(PR_NUMBER)" --run-url "$(RUN_URL)"
 
 ci-security-reports: ## Generate static security and SBOM reports
