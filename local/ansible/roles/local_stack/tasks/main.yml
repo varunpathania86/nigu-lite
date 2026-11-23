@@ -1,0 +1,74 @@
+---
+- name: Create local stack directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ local_root }}"
+    - "{{ local_root }}/traefik"
+    - "{{ local_root }}/garage"
+
+- name: Render local Compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ local_root }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render Traefik dynamic configuration
+  ansible.builtin.template:
+    src: traefik-dynamic.yml.j2
+    dest: "{{ local_root }}/traefik/dynamic.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render local Garage configuration
+  ansible.builtin.template:
+    src: garage.toml.j2
+    dest: "{{ local_root }}/garage/garage.toml"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Deploy local Compose stack
+  community.docker.docker_compose_v2:
+    project_name: "{{ local_project_name }}"
+    project_src: "{{ local_root }}"
+    files:
+      - compose.yml
+    state: present
+    pull: always
+
+- name: Wait for the local HTTPS edge
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ local_edge_port }}"
+    timeout: 60
+
+- name: Verify the local test route
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ local_edge_port }}/"
+    headers:
+      Host: "{{ local_route_host }}"
+    use_proxy: false
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: local_route
+
+- name: Verify Garage health
+  community.docker.docker_container_exec:
+    container: "{{ local_project_name }}-garage-1"
+    command: /garage status
+  register: garage_status
+
+- name: Confirm expected route identity
+  ansible.builtin.assert:
+    that:
+      - "'Welcome to nginx!' in local_route.content"
+      - garage_status.rc == 0

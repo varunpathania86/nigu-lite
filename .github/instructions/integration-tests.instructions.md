@@ -14,7 +14,7 @@ applyTo: 'tests/integration/**'
 - Regression: a fixed deployable bug gets a case that fails without the fix.
 - Migrations: apply every test-tenant migration on a fresh DB and on one upgraded from the previous version.
 - Upgrades use `tests/integration/upgrade/` via `make upgrade-test` (`upgrade.instructions.md`).
-- Talk to the object store only through the S3 API (MinIO locally).
+- Talk to the object store only through the S3 API (Garage locally in S2).
 - Tests must be idempotent and leave the simulator reusable; `make local-reset` wipes everything.
 - CI runs `integration.yml` on merge to `main` and manually, not on PRs.
 - So paste the local `make test-integration` result in the PR "Tests" section.

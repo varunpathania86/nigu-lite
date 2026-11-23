@@ -72,7 +72,7 @@ flowchart LR
 | G7 | **Single repo now**, split later (ERPNext image repo, per-school Gibbon repos) | Folder boundaries = future repo boundaries; only `core` contracts cross folders |
 | G8 | Per-VPS tenant selection from one YAML manifest across product types | `deployments/<vps>.yml` selects services + tenants for `erp`, `edu`, future products |
 | G9 | Tenant resources travel with the tenant | Gibbon branding assets and ordered data migrations (incl. bootstrap) in `tenants/<id>/` |
-| G10 | Local environment that mimics a VPS | Same playbooks run against a local Docker-based "VPS" with test tenants and MinIO as object store |
+| G10 | Local environment that mimics a VPS | Same playbooks run against a local Docker-based "VPS" with test tenants and an S3-compatible object store |
 | G11 | Domains | Three Cloudflare zones. **`erpos.in`**: ERPNext (`<company>.erpos.in`). **`schooledu.in`**: one hostname per school, serving Gibbon at `https://<school>.schooledu.in/`. **`nigu.in`**: nigu-lite control-plane services (`auth`, `vpn`, `dbx`, `beszel`) and VPS node records; the provider's public website at the apex/`www` may use a separate deployment and is outside nigu-lite. Custom school domains later as a **paid** add-on |
 
 ---
@@ -104,7 +104,7 @@ These decisions (D1–D27) form one baseline record, `docs/adr/0001-platform-bas
 | D19 | **Upgrades on Saturdays, one VPS + product at a time** (e.g. `vps-01` edu); old and new Gibbon side by side during the window | Upgrade all VPSs at once; per-school over weeks | Small blast radius, no school-day impact; canary school first, rollback per school = route back + restore snapshot (§5.5). |
 | D20 | **Custom images and tenant packages published as signed OCI artifacts in GHCR** (+ `.tar.gz` on GitHub Releases) | Ansible copies tenant files from a checkout; zip in GitHub Packages | Immutable digests, signing, one registry; deploys use exactly what CI tested (§7.4). |
 | D21 | **Plain-sentence commit messages and PR titles**, branch prefixes `feature/`, `bugfix/`, `patch/`, … | Conventional Commits | Commit message / PR title becomes the GitHub Actions run name; must read cleanly (§11.5). |
-| D22 | **S3-compatible object stores only** (`object_store.type: s3`); MinIO locally, Contabo/B2/R2 in production | Custom adapter layer; provider-native APIs from day one | restic and rclone speak S3; between S3-compatible providers, switching = endpoint + keys. Non-S3 stores (e.g. Azure Blob, native GCS, Swift) need an ADR and a new `type` (§4.5). |
+| D22 | **S3-compatible object stores only** (`object_store.type: s3`); Garage locally (MinIO fallback decision), Contabo/B2/R2 in production | Custom adapter layer; provider-native APIs from day one | restic and rclone speak S3; between S3-compatible providers, switching = endpoint + keys. Non-S3 stores (e.g. Azure Blob, native GCS, Swift) need an ADR and a new `type` (§4.5). |
 | D23 | **Public repo `nigu-lite` under AGPL-3.0**; public GHCR packages; keyless cosign signing (GitHub OIDC); `main` protected by a ruleset | Private repo on GitHub Free | Free Actions minutes, free public package storage (ERPNext image size no longer a cost), free rulesets and code scanning; AGPL keeps hosted forks open and is compatible with GPL-3.0 upstream code. Everything in the repo and its packages is public: no secrets except Vault-encrypted files, no personal data (§7.4, §13). |
 | D24 | **Cloudflare free plan** for DNS, CDN and DDoS on `nigu.in`, `erpos.in`, `schooledu.in`; nigu-lite manages only its VPS, service and tenant records (DNS-only `A` per VPS node, proxied tenant `CNAME`s); public-site records are separate; managed by Ansible via API | Registrar DNS; wildcard records; Cloudflare Tunnel | Offloads static assets and attacks from 8 GB VPSs; tenant moves = one CNAME change, effective at the edge in seconds; no extra container (§3.4). |
 | D25 | **wg-portal** (WireGuard + web UI with OIDC via Authelia) at `vpn.nigu.in`, on the control-plane VPS | Tailscale / NetBird, plain WireGuard configs | Self-hosted, one small container, standard WireGuard clients, self-service `.conf`/QR for `ops`/`admin` (§4.3). |
@@ -507,9 +507,9 @@ sequenceDiagram
 | DB dumps | **`tiredofit/db-backup`** | Per-database MariaDB dumps |
 | Identity SQLite backups | Consistent SQLite snapshots via the SQLite backup API/`.backup`, then restic | Snapshot LLDAP and Authelia separately; never copy live database files directly (including WAL-mode databases). Restore to the owning volume with correct permissions; retain required encryption/signing secrets securely in Vault and test staff login/MFA and wg-portal OIDC after restore. |
 | ERPNext site backup | `bench backup --with-files` job | Native per-site restore |
-| Off-site | **restic** → S3-compatible store: **Contabo Object Storage**, **Backblaze B2** or **Cloudflare R2**; **MinIO** in the local env | Encrypted, deduplicated, retention 7d/4w/6m. Prefer a provider other than the VPS provider for at least one copy. |
+| Off-site | **restic** → S3-compatible store: **Contabo Object Storage**, **Backblaze B2** or **Cloudflare R2**; **Garage** in the local env | Encrypted, deduplicated, retention 7d/4w/6m. Prefer a provider other than the VPS provider for at least one copy. |
 | Shared bucket | One bucket for all VPSs, prefix per VPS (`<vps>/restic`, `<vps>/dumps`); separate access key + restic password per VPS, restricted to its prefix where the provider supports it | A compromised VPS cannot read or delete other VPSs' backups |
-| Restore drill | `make restore-test` on the local env (backs up to and restores from MinIO) | Untested backups are not backups |
+| Restore drill | `make restore-test` on the local env (backs up to and restores from Garage) | Untested backups are not backups |
 
 ```mermaid
 flowchart LR
@@ -532,7 +532,7 @@ flowchart LR
 
 | Backend | Status | Notes |
 |---|---|---|
-| MinIO (local env) | Supported | Integration tests; Garage/SeaweedFS as drop-in local alternatives |
+| Garage (local env) | Supported | Integration tests; MinIO/SeaweedFS remain S3-compatible alternatives |
 | Contabo Object Storage | Supported (target) | S3-compatible; path-style |
 | Backblaze B2 (S3-compatible endpoint) | Supported | Use the S3 endpoint, not B2's native API |
 | Cloudflare R2 | Supported | `region: auto` |
@@ -1026,7 +1026,7 @@ Rules: forward-only (no down scripts; rollback = restore the snapshot); a change
 | `image-build PRODUCT= APP=` | Build image (+ Trivy scan) |
 | `deploy VPS=` | Validate manifest, then deploy core + selected products |
 | `tenant-new PRODUCT= ID=` | Scaffold tenant from template |
-| `db-shell VPS= DB=` / `s3-ls VPS=` | CLI access to DB / object store (MinIO locally) |
+| `db-shell VPS= DB=` / `s3-ls VPS=` | CLI access to DB / object store (Garage locally) |
 | `s3-check VPS=` | Object-store compatibility smoke test against the configured provider (§4.5) |
 | `backup-now VPS=` / `restore-test` | Backup / restore drill in local env |
 | `vault-edit FILE=` | Edit secrets |
@@ -1333,14 +1333,14 @@ jobs:
 
 | Aspect | Design |
 |---|---|
-| Model | `local/Dockerfile`: Ubuntu 24.04 + systemd + sshd + Docker Engine. Ansible connects over SSH exactly as to a real VPS. Docker-in-Docker. |
+| Model | `local/Containerfile`: Ubuntu 24.04 + systemd + sshd + Docker Engine. A separate ephemeral Operations Container runs Ansible over SSH exactly as against a real VPS. |
 | Runtime | Default: `--privileged` container with its own `/var/lib/docker` volume. Preferred if available: **Sysbox** runtime (`--runtime=sysbox-runc`), which runs systemd + Docker without `--privileged`. |
 | Fidelity gaps | UFW/iptables, swap, sysctl and kernel tuning do not fully apply inside a container. Tagged `host_kernel` and skipped locally. For full fidelity: `make local-vm` using **Multipass** or libvirt. |
 | DNS | `*.localhost` (resolves to 127.0.0.1 in browsers) or `*.lvh.me`/`nip.io` for tools; hostnames come from test tenants. |
 | TLS | `tls.mode: selfsigned` in `deployments/local.yml`. Optional **Pebble** (local ACME test server) to exercise the ACME path. |
 | Cloudflare | `dns.provider: none`: Cloudflare role not run; its rendered API payloads are unit-tested; first real run in S6 |
 | VPN + RBAC | wg-portal runs in the simulator (needs the host's WireGuard kernel module); integration tests use a WireGuard client container to check the VPN-only rules, and LLDAP test users in `admin`/`ops`/`support` |
-| Object store | **MinIO** container in the simulator (same `object_store` config block, `endpoint: http://minio:9000`); bucket created by Ansible via the S3 API |
+| Object store | **Garage** container as the S2 MinIO fallback (same S3 contract, `endpoint: http://garage:3900`); object-store tests use only the S3 API |
 | Data | Test tenants with synthetic data only; `make local-reset` wipes everything. |
 | Resources | Recommended developer machine: 16 GB RAM (simulator capped at ~8 GB like the VPS). |
 | Prerequisites | None by hand: S2 adds a Docker Engine step to `make setup` (§7.3); `make doctor` reports what is missing. |
@@ -1348,14 +1348,14 @@ jobs:
 ```mermaid
 flowchart LR
   DEV[Developer] -->|make local-up| SIM[VPS simulator container<br/>systemd + sshd + Docker]
-  DEV -->|make local-deploy| ANS[Ansible] -->|SSH| SIM
+  DEV -->|make local-deploy| OPS[Operations Container<br/>Ansible] -->|SSH| SIM
   SIM --> STACK[Same Compose stacks<br/>+ test tenants]
-  STACK -->|backups| MINIO[(MinIO)]
+  STACK -->|S3| GARAGE[(Garage)]
   DEV -->|make test-integration / bench| STACK
   class DEV user
   class STACK app
-  class MINIO data
-  class SIM,ANS tool
+  class GARAGE data
+  class SIM,OPS tool
   classDef user fill:#eceff1,stroke:#455a64,color:#1a1a1a
   classDef app fill:#bbdefb,stroke:#1565c0,color:#1a1a1a
   classDef data fill:#b2dfdb,stroke:#00695c,color:#1a1a1a
@@ -1551,7 +1551,7 @@ Each file in `.github/instructions/` is **20–30 lines**, named `*.instructions
 | `release-publish.instructions.md` | CI publish workflows, images, tenant packages | §7.4: no secrets in packages, digest pins, signing, lock files |
 | `github-actions.instructions.md` | Editing `.github/workflows/*` or `scripts/ci/*` | §7.5: catalog → plan → matrix → report; jobs call `make`; SHA pins; per-job permissions; timeouts; report artifacts; advisory vs blocking |
 | `security.instructions.md` | Secrets, ports, personal data, ads | Vault, exposure rules, ad guard-rails |
-| `local-env.instructions.md` | Local simulator | `make local-*`, `host_kernel` tag, `tls.mode: selfsigned`, MinIO |
+| `local-env.instructions.md` | Local simulator | `make local-*`, `host_kernel` tag, `tls.mode: selfsigned`, Garage |
 | `dev-setup.instructions.md` | Adding a tool, runtime or system package developers need | Zero manual setup: every new dependency ships with its `make setup` step (`.tool-versions` pin first, step file only when mise cannot install it); idempotent check/install; `make doctor` |
 | `instructions-maintenance.instructions.md` | After any change that alters a convention | **Self-update rules** (below) |
 
@@ -1947,7 +1947,7 @@ flowchart LR
 |---|---|---|
 | **S0 — Repo foundation** (single initial commit) | Create public repo (`main`, AGPL-3.0 `LICENSE`, `SECURITY.md`); `AGENTS.md` + `.github/instructions/*`; `.editorconfig`, `.gitattributes`, `.gitignore`, `.tool-versions`, `.pre-commit-config.yaml`; Makefile skeleton; `docs/templates/*` (README, ADR, SDD, LLD, tenant, VPS manifest); PR template with mermaid section; `commit-msg` hook + branch rules; `make setup` / `make doctor` with `scripts/setup/steps/*` (zero manual developer setup); `versions.yml`; baseline ADR `0001-platform-baseline.md` (D1–D27) and LLD template; root/product READMEs; repo settings (squash only, secret scanning + push protection, Dependabot alerts, private vulnerability reporting) | `make setup lint` passes on a clean clone; templates render; AGENTS index matches files |
 | **S1 — CI, scanning, manifests, unit tests** | `scripts/ci/` catalog, plan and report (+ unit tests); `build.yml`, `iac-security.yml`, `publish.yml`, `reports.yml`, `retention.yml` (§7.5); pre-commit incl. actionlint/zizmor; Trivy fs/config/secret + SARIF upload; Reviewdog and Dependency Review PR checks; Ruff lint SARIF; KICS + conftest evaluation; PR title/branch checks; publish with ORAS + keyless cosign, proven with the `local-vps` image and a test tenant package; Allure, Trivy HTML and CycloneDX Pages reports for `main` and tags; Renovate (`patch/` branches); manifest schema + validator; Jinja2 render tests; test tenant skeletons in `tests/tenants/`; enable the `main` ruleset (§7.4) | CI green; invalid manifests fail before remote tasks; deploy without `VPS=` fails; each workflow uploads `report.md` + `report.html`; Reviewdog/Dependency Review annotate PRs; Allure + security + SBOM Pages exist after the first `main`/tag publish; a docs-only PR builds no modules; a direct push to `main` is rejected |
-| **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); Docker Engine `make setup` step; `deployments/local.yml`; `tls.mode` (self-signed); MinIO; `make local-up/down/reset/deploy` | Fresh clone → `make local-up local-deploy` gives a running edge with a test route |
+| **S2 — Local environment** | `local/` simulator (systemd + sshd + Docker, privileged or Sysbox); separate ephemeral Operations Container; Docker Engine `make setup` step; `deployments/local.yml`; `tls.mode` (self-signed); Garage S3 fallback; `make local-up/down/reset/deploy/status`; integration tests | Fresh clone → `make local-up local-deploy` gives a running edge with a test route, healthy Traefik and Garage |
 | **S3 — Core platform** | Host baseline roles (`host_kernel` tagged), Traefik (file provider, `selfsigned`, ACME DNS-01 resolver), MariaDB 11.8 LTS after ERPNext/Gibbon compatibility proof, LLDAP (groups `admin`/`ops`/`support`), Authelia (access rules + OIDC policies), wg-portal (OIDC), Beszel, Dozzle, DBX with the protection chain + LDAP Studio, backups (restic → S3), `db-shell`, `s3-ls`; Cloudflare role (render + check mode only) | Integration tests: health, per-tenant DB provisioning, native vector type/index smoke test, backup → restore, **access matrix §13.1**, Traefik sees `10.10.0.x` client IPs in the local env |
 | **S4 — Edu: Gibbon spike then pilot** | Spike: FrankenPHP image + pinned Gibbon + `tenant-guard.php`; isolation tests (cross-tenant file/DB/session access must fail); verify Gibbon root-path compatibility; benchmark vs per-school containers. Pilot: per-school Traefik host routers + Caddy blocks from manifest; tenant assets + SQL migrations from signed packages; per-school `/_health` + Traefik health checks; side-by-side versions + `make upgrade-test`; one shared `ai-embed` Model2Vec service; CI-generated knowledge indexes; Gibbon AI chat with tenant-admin Gemini/OpenAI key | Isolation suite passes, or fallback (D7) is decided by ADR; benchmark results committed; two test schools pass integration and host-routing tests (§9); an unhealthy test school does not affect the other; school A cannot retrieve school B knowledge; two synthetic schools answer four cited chunks through a mocked provider; `ai-embed` stays within its RAM target; upgrade + rollback drill passes; `edu-*` and `ai-retrieval-*` benchmarks recorded against §9.1 |
 | **S5 — ERP pilot** | ERPNext + India Compliance image (Trivy-scanned, SBOM); multi-site bench; site lifecycle (create/restore/retire) from manifest; tenant JSON migrations via REST API + `Nigu Migration` DocType; assets; SMTP; ERP chat/knowledge adapter to the same shared `ai-embed` service and tenant knowledge-vector contract | Two test companies; GSTR report on synthetic data; per-site restore; ERP company A cannot retrieve company B or school knowledge; every AI-enabled ERP tenant uses the same loaded model; no second embedding process is loaded; `erp-*` and shared AI benchmarks recorded against §9.1 |

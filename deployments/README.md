@@ -25,18 +25,20 @@ Run `make manifest-validate` to validate repository manifests and test tenants.
 |---|---|
 | `schema.json` | JSON Schema for VPS manifests |
 | `tenant.schema.json` | JSON Schema for tenant definitions |
+| `local.yml` | Stage 2 local simulator manifest |
 | `<vps>.yml` | One explicit service and tenant selection per VPS |
 | `<vps>.lock.yml` | Generated immutable artifact locks in later stages |
 
 ## Configuration
 
 Every key is explicit. There are no defaults. Production requires Cloudflare DNS and Let's Encrypt TLS.
-Exactly one production VPS hosts the control plane.
+The local manifest uses self-signed TLS, no DNS provider and synthetic test tenants only.
 
 ## Operations
 
-Stage 1 validates manifests before CI planning. Deployment remains out of scope. Future deployments
-must use the generated lock and verify signatures before remote work.
+CI validates manifests before planning. `make local-up local-deploy` uses `local.yml` to prove SSH and
+Ansible delivery without starting production roles. Production deployment remains out of scope and must
+later use a generated lock with verified signatures.
 
 ## Tests
 

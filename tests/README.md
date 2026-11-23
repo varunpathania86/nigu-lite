@@ -1,13 +1,13 @@
 # tests
 
-> Automated tests for the platform. Owner: varunpathania86 · Status: active (S1 CI and unit tests)
+> Automated tests for the platform. Owner: varunpathania86 · Status: active (S2 local integration)
 
 ## Overview
 
 ```mermaid
 flowchart LR
   M["make test-unit"] --> B["Ephemeral Build Container"] --> U["tests/unit<br/>CI, manifests, scripts"]
-  M2["make test-integration (S2+)"] --> I["tests/integration<br/>local VPS + test tenants"]
+  M2["make test-integration"] --> I["tests/integration<br/>local VPS + test tenants"]
   M3["make bench (S4+)"] --> B["tests/benchmarks<br/>k6 scenarios"]
   class M,M2,M3,B tool
   classDef tool fill:#fff9c4,stroke:#f9a825,color:#1a1a1a
@@ -17,6 +17,8 @@ flowchart LR
 
 `make test-unit`
 
+`make local-up local-deploy test-integration`
+
 ## Structure
 
 | Path | Purpose |
@@ -25,24 +27,24 @@ flowchart LR
 | `tenants/` | Two synthetic ERP and edu tenants used by catalog and package tests |
 | `fixtures/` | Dummy secrets and service-free OCI build fixtures |
 | `act/` | Future Act event fixtures; local runs currently use the committed branch or isolated snapshot |
-
-`integration/` and `benchmarks/` are added by later stages.
+| `integration/` | Cross-service checks against the local VPS simulator |
 
 ## Configuration
 
-Unit tests are offline and use no secrets, Docker, SSH or real tenant data. `tests/fixtures/dummy-secrets.yml`
-uses schematic values for rendering.
+Unit tests are offline and use no secrets, Docker, SSH or real tenant data. Integration tests use the
+synthetic `deployments/local.yml` selection and only the dedicated `nigu-local-*` state.
 
 ## Operations
 
 Run in `build.yml` → `quality`. Local `make act-build MODE=...` creates a snapshot from an unpushed
 feature branch, index or isolated worktree and runs it through Act and Build Containers.
+`make test-integration` verifies SSH, nested Docker, Traefik routing and Garage through the simulator.
 
 ## Tests
 
 Each code change adds or updates focused tests here (`.github/instructions/unit-tests.instructions.md`).
 Build snapshot, package determinism and manifest rejection paths are covered by `tests/unit/ci/` and
-`tests/unit/manifests/`.
+`tests/unit/manifests/`; Stage 2 contract tests live in `tests/unit/local/`.
 
 ## Related
 
