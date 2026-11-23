@@ -8,11 +8,67 @@
           "fullName": "Trivy Vulnerability Scanner",
           "informationUri": "https://github.com/aquasecurity/trivy",
           "name": "Trivy",
-          "rules": [],
+          "rules": [
+            {
+              "id": "DS-0004",
+              "name": "Misconfiguration",
+              "shortDescription": {
+                "text": "Port 22 exposed"
+              },
+              "fullDescription": {
+                "text": "Exposing port 22 might allow users to SSH into the container."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "helpUri": "https://avd.aquasec.com/misconfig/ds-0004",
+              "help": {
+                "text": "Misconfiguration DS-0004\nType: Dockerfile Security Check\nSeverity: MEDIUM\nCheck: Port 22 exposed\nMessage: Port 22 should not be exposed in Dockerfile\nLink: [DS-0004](https://avd.aquasec.com/misconfig/ds-0004)\nExposing port 22 might allow users to SSH into the container.",
+                "markdown": "**Misconfiguration DS-0004**\n| Type | Severity | Check | Message | Link |\n| --- | --- | --- | --- | --- |\n|Dockerfile Security Check|MEDIUM|Port 22 exposed|Port 22 should not be exposed in Dockerfile|[DS-0004](https://avd.aquasec.com/misconfig/ds-0004)|\n\nExposing port 22 might allow users to SSH into the container."
+              },
+              "properties": {
+                "precision": "very-high",
+                "security-severity": "5.5",
+                "tags": [
+                  "misconfiguration",
+                  "security",
+                  "MEDIUM"
+                ]
+              }
+            }
+          ],
           "version": "0.76.2"
         }
       },
-      "results": [],
+      "results": [
+        {
+          "ruleId": "DS-0004",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "Artifact: local/Containerfile\nType: dockerfile\nVulnerability DS-0004\nSeverity: MEDIUM\nMessage: Port 22 should not be exposed in Dockerfile\nLink: [DS-0004](https://avd.aquasec.com/misconfig/ds-0004)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "local/Containerfile",
+                  "uriBaseId": "ROOTPATH"
+                },
+                "region": {
+                  "startLine": 29,
+                  "startColumn": 1,
+                  "endLine": 29,
+                  "endColumn": 1
+                }
+              },
+              "message": {
+                "text": "local/Containerfile"
+              }
+            }
+          ]
+        }
+      ],
       "columnKind": "utf16CodeUnits",
       "originalUriBaseIds": {
         "ROOTPATH": {

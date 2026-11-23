@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.7",
-  "serialNumber": "urn:uuid:b9d3b5d6-e3a3-445a-a177-c77d4f1e2ccc",
+  "serialNumber": "urn:uuid:80c53775-6867-495d-90e7-e30925a5351b",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-22T23:18:55+00:00",
+    "timestamp": "2026-11-23T21:32:41+00:00",
     "tools": {
       "components": [
         {
@@ -20,7 +20,7 @@
       ]
     },
     "component": {
-      "bom-ref": "b794a275-ecfa-4fd2-9b9f-561e666e91a2",
+      "bom-ref": "6f594b3c-c320-4ab7-b69d-69e5a95341bb",
       "type": "application",
       "name": ".",
       "properties": [
@@ -33,7 +33,7 @@
   },
   "components": [
     {
-      "bom-ref": "70e51860-e24c-47d5-9274-c6a4a31b5a75",
+      "bom-ref": "c313822c-0109-4e22-b720-6d2c03efe3ca",
       "type": "application",
       "name": "requirements-ci.txt",
       "properties": [
@@ -60,6 +60,26 @@
         }
       ],
       "purl": "pkg:pypi/allure-pytest@2.16.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "pip"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/jinja2@3.1.6",
+      "type": "library",
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/jinja2@3.1.6",
       "properties": [
         {
           "name": "aquasecurity:trivy:PkgType",
@@ -190,9 +210,16 @@
   ],
   "dependencies": [
     {
-      "ref": "70e51860-e24c-47d5-9274-c6a4a31b5a75",
+      "ref": "6f594b3c-c320-4ab7-b69d-69e5a95341bb",
+      "dependsOn": [
+        "c313822c-0109-4e22-b720-6d2c03efe3ca"
+      ]
+    },
+    {
+      "ref": "c313822c-0109-4e22-b720-6d2c03efe3ca",
       "dependsOn": [
         "pkg:pypi/allure-pytest@2.16.2",
+        "pkg:pypi/jinja2@3.1.6",
         "pkg:pypi/jsonschema@4.25.1",
         "pkg:pypi/pre-commit@4.7.0",
         "pkg:pypi/pytest@9.2.0",
@@ -202,13 +229,11 @@
       ]
     },
     {
-      "ref": "b794a275-ecfa-4fd2-9b9f-561e666e91a2",
-      "dependsOn": [
-        "70e51860-e24c-47d5-9274-c6a4a31b5a75"
-      ]
+      "ref": "pkg:pypi/allure-pytest@2.16.2",
+      "dependsOn": []
     },
     {
-      "ref": "pkg:pypi/allure-pytest@2.16.2",
+      "ref": "pkg:pypi/jinja2@3.1.6",
       "dependsOn": []
     },
     {
